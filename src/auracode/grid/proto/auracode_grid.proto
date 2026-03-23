@@ -1,0 +1,37 @@
+syntax = "proto3";
+package auracode.grid;
+
+service AuraCodeGrid {
+    rpc Execute (GridRequest) returns (GridResponse);
+    rpc ExecuteStream (GridRequest) returns (stream GridChunk);
+    rpc HealthCheck (Empty) returns (HealthStatus);
+    rpc ListModels (Empty) returns (ModelList);
+}
+
+message GridRequest {
+    string request_id = 1;
+    string intent = 2;
+    string prompt = 3;
+    string context_json = 4;
+    map<string, string> options = 5;
+}
+
+message GridResponse {
+    string request_id = 1;
+    string content = 2;
+    string model_used = 3;
+    int32 prompt_tokens = 4;
+    int32 completion_tokens = 5;
+    string error = 6;
+}
+
+message GridChunk {
+    string request_id = 1;
+    string content_delta = 2;
+    bool is_final = 3;
+}
+
+message Empty {}
+message HealthStatus { bool healthy = 1; string version = 2; }
+message ModelList { repeated ModelEntry models = 1; }
+message ModelEntry { string model_id = 1; string provider = 2; repeated string tags = 3; }

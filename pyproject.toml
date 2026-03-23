@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "auracode"
+version = "0.1.0"
+description = "Terminal-native, vendor-agnostic AI coding assistant."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [
+    { name = "AuraCore Dynamics Inc." },
+]
+dependencies = [
+    "pydantic>=2.0",
+    "click>=8.0",
+    "structlog",
+    "PyYAML>=6.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+api = [
+    "aiohttp>=3.9",
+]
+grid = [
+    "grpcio>=1.60",
+    "grpcio-tools>=1.60",
+    "protobuf>=4.25",
+]
+all = [
+    "auracode[api,grid]",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio",
+    "pytest-aiohttp",
+    "auracode[all]",
+]
+
+[project.scripts]
+auracode = "auracode.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

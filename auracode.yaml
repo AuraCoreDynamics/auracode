@@ -1,0 +1,21 @@
+# AuraCode default configuration
+# Override by placing a copy at ~/.config/auracode/auracode.yaml
+
+# Path to an AuraRouter config (if using AuraRouter as backend)
+router_config_path: null
+
+# Adapter used when none is specified
+default_adapter: claude-code
+
+# Logging level (DEBUG, INFO, WARNING, ERROR)
+log_level: INFO
+
+# AuraGrid distributed compute endpoint (optional)
+grid_endpoint: null
+grid_failover_to_local: true
+
+# Maximum context tokens sent to local models
+local_context_limit: 100000
+
+# Per-adapter configuration blocks
+adapters: {}
