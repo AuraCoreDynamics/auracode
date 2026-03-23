@@ -1,58 +1,211 @@
-# AuraCode
+# AuraCode — Developer Reference
 
-Terminal-native, vendor-agnostic AI coding assistant built under AuraCore Dynamics Inc.
+Terminal-native, vendor-agnostic AI coding assistant built under AuraCore Dynamics Inc. AuraCode routes coding requests through a Federated Mixture-of-Experts (FMoE) fabric, selecting the right model for every task automatically.
 
 ## Architecture
 
-AuraCode follows a layered, dependency-inverted design:
+AuraCode follows a layered, dependency-inverted design with strict separation between presentation (adapters), orchestration (engine), and inference (routing backends).
 
 ```
-Adapters (CLI, IDE, MCP)  -->  Engine  -->  Router Backends (AuraRouter, local, grid)
-                                  |
-                            SessionManager
+Adapters (CLI, IDE, MCP, API shim)
+         |
+    EngineRequest / EngineResponse
+         |
+    AuraCodeEngine
+         |-- SessionManager (in-memory conversation state)
+         |-- AdapterRegistry (adapter discovery and lookup)
+         |-- BackendRegistry (routing backend management)
+         |
+    BaseRouterBackend
+         |-- EmbeddedRouterBackend (AuraRouter — local FMoE)
+         |-- GridDelegateBackend (AuraGrid — distributed gRPC)
+         |-- FailoverBackend (Grid -> Local automatic fallback)
 ```
 
-- **Models** (`src/auracode/models/`): Pydantic v2 frozen data classes. All request/response objects are immutable.
-- **Adapters** (`src/auracode/adapters/`): Translate external I/O into `EngineRequest`/`EngineResponse`. Each adapter implements `BaseAdapter`.
-- **Router Backends** (`src/auracode/routing/`): Select a model and execute inference. Implement `BaseRouterBackend`.
-- **Engine** (`src/auracode/engine/`): `AuraCodeEngine` is the orchestrator. `SessionManager` tracks conversation state in memory. Registries manage adapters and backends.
-- **CLI** (`src/auracode/cli.py`): Click-based entry-point.
-- **Util** (`src/auracode/util/`): Cross-cutting concerns (logging via structlog).
+### Key Design Decisions
+
+- **Adapter pattern over plugin system.** Adapters are discovered via `importlib` package scanning. No entry points, no plugin registry. The adapter set is known at build time — we're cloning specific tools, not building a marketplace.
+- **AuraRouter as library dependency, not fork.** AuraCode imports AuraRouter classes directly. `BaseRouterBackend` provides the abstraction boundary. If AuraRouter's API changes, only `EmbeddedRouterBackend` needs updating.
+- **OpenAI-compatible API as universal shim.** One endpoint covers most IDE extensions. No need for per-extension protocol implementations.
+- **Failover as backend wrapper, not engine logic.** `FailoverBackend` composes grid + local backends. The engine always talks to one backend — composition happens outside.
+- **Async-first engine.** All engine and routing operations are `async`. Synchronous AuraRouter calls are wrapped with `asyncio.to_thread()`.
+- **Frozen domain models.** All Pydantic models use `ConfigDict(frozen=True)` for immutability. Exception: `AuraCodeConfig` is mutable for runtime overrides.
+
+## Project Structure
+
+```
+src/auracode/
+  __init__.py              # Package root, __version__, public API re-exports
+  app.py                   # Application bootstrap (load_config, create_application)
+  cli.py                   # Unified Click CLI (status, models, serve, claude)
+  mcp_server.py            # Reverse-MCP server factory
+  models/
+    request.py             # EngineRequest, EngineResponse, RequestIntent, TokenUsage, FileArtifact
+    context.py             # SessionContext, FileContext
+    config.py              # AuraCodeConfig
+  adapters/
+    base.py                # BaseAdapter ABC
+    loader.py              # discover_adapters() — package scanning
+    claude_code/           # Claude Code CLI adapter
+      adapter.py           # ClaudeCodeAdapter
+      cli.py               # Click group: chat, do, explain, review
+      formatter.py         # Rich terminal output formatting
+    openai_shim/           # OpenAI API adapter (no CLI — API-only)
+      adapter.py           # OpenAIShimAdapter
+    copilot/               # Skeleton
+    aider/                 # Skeleton
+    codestral/             # Skeleton
+  routing/
+    base.py                # BaseRouterBackend ABC, ModelInfo, RouteResult
+    embedded.py            # EmbeddedRouterBackend (wraps AuraRouter ComputeFabric)
+    intent_map.py          # INTENT_ROLE_MAP, map_intent_to_role(), build_context_prompt()
+    mcp_catalog.py         # McpCatalogClient, ToolInfo
+  engine/
+    core.py                # AuraCodeEngine (execute, get_session, close_session)
+    session.py             # SessionManager (in-memory dict, UUID generation)
+    registry.py            # AdapterRegistry, BackendRegistry
+  shim/
+    server.py              # create_app(), start_server(), start_server_daemon()
+    openai_compat.py       # chat_completions(), completions() handlers
+    models_endpoint.py     # list_models() handler
+    middleware.py           # error_middleware, logging_middleware, CORS
+  grid/
+    client.py              # GridDelegateBackend (gRPC with mTLS)
+    failover.py            # FailoverBackend (primary -> fallback)
+    serializer.py          # engine_request_to_grid(), grid_response_to_route_result()
+    messages.py            # Pure Python dataclasses mirroring proto messages
+    proto/
+      auracode_grid.proto  # Protobuf service definition (Execute, ExecuteStream, HealthCheck, ListModels)
+  util/
+    logging.py             # configure_logging() via structlog
+```
 
 ## Conventions
 
-- **Python 3.12+**, src-layout.
+- **Python 3.12+**, src-layout (`[tool.setuptools.packages.find] where = ["src"]`).
 - All domain models use `model_config = ConfigDict(frozen=True)`.
-- Config model (`AuraCodeConfig`) is intentionally mutable for runtime overrides.
+- `AuraCodeConfig` is intentionally mutable for runtime overrides.
 - ABCs use `@abstractmethod`; no default implementations.
-- Async throughout the engine and routing layers.
+- `async def` throughout the engine and routing layers.
 - structlog for structured logging.
+- Adapters are subpackages under `adapters/` with a `register(registry)` entry point.
+- Optional dependencies are grouped: `[api]` for aiohttp, `[grid]` for gRPC, `[all]` for everything.
+- Graceful degradation: missing optional packages produce helpful errors, not crashes.
+
+## Configuration
+
+Config lookup chain: `--config` flag > `./auracode.yaml` > `~/.auracode.yaml` > defaults.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `router_config_path` | `str \| null` | `null` | Path to AuraRouter's `auraconfig.yaml` |
+| `default_adapter` | `str` | `"claude-code"` | Adapter used when none specified |
+| `log_level` | `str` | `"INFO"` | Logging verbosity |
+| `grid_endpoint` | `str \| null` | `null` | AuraGrid gRPC endpoint |
+| `grid_failover_to_local` | `bool` | `true` | Fall back to local if grid unavailable |
+| `local_context_limit` | `int` | `100000` | Token threshold for grid delegation |
+| `adapters` | `dict` | `{}` | Per-adapter configuration blocks |
+
+## Intent-to-Role Mapping
+
+The routing layer maps each `RequestIntent` to an AuraRouter role:
+
+| Intent | Role | Rationale |
+|--------|------|-----------|
+| `GENERATE_CODE` | `coder` | Bounded task, speed-optimized |
+| `EDIT_CODE` | `coder` | Pattern recognition, targeted modification |
+| `COMPLETE_CODE` | `coder` | Lowest latency, inline completion |
+| `EXPLAIN_CODE` | `reasoning` | Requires contextual understanding |
+| `REVIEW` | `reasoning` | Requires judgment and architectural context |
+| `CHAT` | `reasoning` | Open-ended, benefits from depth |
+| `PLAN` | `reasoning` | Decomposition, frontier capability required |
+
+Roles are defined in AuraRouter's `auraconfig.yaml` as ordered model chains. The `"coder"` role might chain `[local-codellama, sonnet, opus]`. The `"reasoning"` role might chain `[opus, deepseek-r1, local-phi3]`. AuraRouter tries each in order until one succeeds.
+
+## Application Bootstrap
+
+`create_application(config_path)` in `app.py` wires the full stack:
+
+1. Load config (YAML file or defaults)
+2. Configure structured logging
+3. Create `EmbeddedRouterBackend` if AuraRouter is installed
+4. If `grid_endpoint` is set: create `GridDelegateBackend` + `FailoverBackend`
+5. Fall back to `StubBackend` if no real backend is available
+6. Discover and register all adapters
+7. Create and return `(AuraCodeEngine, AdapterRegistry, BackendRegistry)`
+
+The bootstrap handles every combination of available/missing dependencies gracefully.
+
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `auracode status` | Show health: adapters, router status, model count |
+| `auracode models` | List available models with provider and tags |
+| `auracode serve [--port 8741] [--host 127.0.0.1]` | Start OpenAI-compatible API server |
+| `auracode claude chat [-c FILE] [-m MODEL] [--json]` | Interactive REPL |
+| `auracode claude do PROMPT [-c FILE] [-m MODEL] [--json]` | One-shot generation |
+| `auracode claude explain FILE [-c FILE] [-m MODEL] [--json]` | Explain a file |
+| `auracode claude review FILE [-c FILE] [-m MODEL] [--json]` | Review code |
+| `auracode --version` | Show version |
+
+## API Shim Endpoints
+
+When running `auracode serve`:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/chat/completions` | POST | OpenAI chat completions (streaming + non-streaming) |
+| `/v1/completions` | POST | Legacy OpenAI completions |
+| `/v1/models` | GET | List models (OpenAI format) |
+| `/health` | GET | Liveness check |
+
+Server binds to `127.0.0.1` by default (no external exposure). Port 8741.
+
+## MCP Tools
+
+The reverse-MCP server (`mcp_server.py`) exposes:
+
+| Tool | Signature | Description |
+|------|-----------|-------------|
+| `auracode_generate` | `(prompt, intent?, context_dir?)` | Generate code |
+| `auracode_explain` | `(file_path)` | Explain file contents |
+| `auracode_review` | `(file_path)` | Review code |
+| `auracode_models` | `()` | List available models |
+
+## Relationship to AuraCore Ecosystem
+
+AuraCode sits atop three AuraCore systems:
+
+- **AuraRouter** (open source, Apache-2.0) — Multi-model MCP routing fabric. AuraCode embeds it as the `EmbeddedRouterBackend`. Handles model selection, fallback chains, cost optimization, and intent analysis. Models: Ollama, llama.cpp, Claude, Gemini, OpenAI-compatible.
+- **AuraGrid** (proprietary) — Federated compute fabric. AuraCode delegates heavy requests via gRPC (`GridDelegateBackend`). Auction-based resource allocation, event-sourced durability, split-brain resilient, mTLS-secured. Provides distributed inference for requests that exceed local capacity.
+- **AuraXLM** (proprietary) — Decentralized mixture-of-experts with RAG. When connected via AuraRouter, provides retrieval-augmented generation grounded in your codebase, domain-specific fine-tuned models via Model Foundry, and geospatial intelligence capabilities.
+
+AuraCode works standalone — it does not require AuraGrid or AuraXLM. But each layer adds capabilities: AuraRouter adds intelligent routing, AuraGrid adds distributed scale, AuraXLM adds domain-specific knowledge.
 
 ## Testing
 
 ```bash
-# Activate environment and install dev deps
-pip install -e ".[dev]"
-
-# Run tests
+# Full suite (169 tests)
 pytest tests/ -x -q
+
+# By component
+pytest tests/test_models.py -x -q          # Domain models
+pytest tests/test_engine.py -x -q          # Engine, session, registry
+pytest tests/test_adapters/ -x -q          # Adapter discovery, Claude Code
+pytest tests/test_routing/ -x -q           # Embedded router, intent map, MCP catalog
+pytest tests/test_shim/ -x -q              # API shim server
+pytest tests/test_grid/ -x -q              # Grid client, failover
+pytest tests/test_integration/ -x -q       # End-to-end bootstrap, CLI, full path
 ```
 
-Tests live in `tests/`. Fixtures and mock backends are in `tests/conftest.py`.
-
-## Configuration
-
-Default config lives in `auracode.yaml` at the project root. Keys:
-
-| Key | Default | Purpose |
-|-----|---------|---------|
-| `default_adapter` | `claude-code` | Adapter used when none specified |
-| `log_level` | `INFO` | Logging verbosity |
-| `grid_endpoint` | `null` | AuraGrid endpoint for distributed compute |
-| `grid_failover_to_local` | `true` | Fall back to local if grid is unavailable |
-| `local_context_limit` | `100000` | Max context tokens for local models |
+All routing and grid tests are fully mocked — they pass without AuraRouter or AuraGrid installed.
 
 ## Dependencies
 
-Runtime: pydantic>=2.0, click>=8.0, structlog, PyYAML>=6.0
-Dev: pytest>=8.0, pytest-asyncio
+| Group | Packages |
+|-------|----------|
+| Core | `pydantic>=2.0`, `click>=8.0`, `structlog`, `PyYAML>=6.0`, `rich>=13.0` |
+| `[api]` | `aiohttp>=3.9` |
+| `[grid]` | `grpcio>=1.60`, `grpcio-tools>=1.60`, `protobuf>=4.25` |
+| `[dev]` | `pytest>=8.0`, `pytest-asyncio`, `pytest-aiohttp`, plus `[all]` |

@@ -1,0 +1,6 @@
+include README.md
+include LICENSE
+include CLAUDE.md
+include auracode.yaml
+recursive-include src/auracode/grid/proto *.proto
+include src/auracode/py.typed

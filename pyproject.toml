@@ -5,12 +5,41 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "auracode"
 version = "0.1.0"
-description = "Terminal-native, vendor-agnostic AI coding assistant."
+description = "Terminal-native, vendor-agnostic AI coding assistant powered by Federated Mixture-of-Experts"
 readme = "README.md"
-license = "MIT"
+license = { text = "MIT" }
 requires-python = ">=3.12"
 authors = [
-    { name = "AuraCore Dynamics Inc." },
+    { name = "Steven Siebert", email = "info@auracoredynamics.com" },
+]
+maintainers = [
+    { name = "AuraCore Dynamics Inc.", email = "info@auracoredynamics.com" },
+]
+keywords = [
+    "ai",
+    "coding-assistant",
+    "llm",
+    "mixture-of-experts",
+    "mcp",
+    "code-generation",
+    "auracore",
+    "fmoe",
+    "multi-model",
+    "cli",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Typing :: Typed",
 ]
 dependencies = [
     "pydantic>=2.0",
@@ -36,8 +65,15 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio",
     "pytest-aiohttp",
+    "ruff",
     "auracode[all]",
 ]
+
+[project.urls]
+Homepage = "https://github.com/AuraCoreDynamics/auracode"
+Repository = "https://github.com/AuraCoreDynamics/auracode"
+Issues = "https://github.com/AuraCoreDynamics/auracode/issues"
+Documentation = "https://github.com/AuraCoreDynamics/auracode#readme"
 
 [project.scripts]
 auracode = "auracode.cli:main"
@@ -45,5 +81,17 @@ auracode = "auracode.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+auracode = ["py.typed"]
+
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
