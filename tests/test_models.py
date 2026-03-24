@@ -15,10 +15,10 @@ from auracode.models.request import (
     TokenUsage,
 )
 
-
 # ---------------------------------------------------------------------------
 # Construction
 # ---------------------------------------------------------------------------
+
 
 class TestTokenUsage:
     def test_defaults(self) -> None:
@@ -140,6 +140,7 @@ class TestAuraCodeConfig:
 # ---------------------------------------------------------------------------
 # Serialization round-trip
 # ---------------------------------------------------------------------------
+
 
 class TestSerializationRoundTrip:
     def test_engine_request(self, sample_request: EngineRequest) -> None:

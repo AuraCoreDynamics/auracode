@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from auracode.models.preferences import UserPreferences
 from auracode.engine.preferences import PreferencesManager
+from auracode.models.preferences import UserPreferences
 
 
 class TestUserPreferences:
@@ -134,4 +134,3 @@ class TestPreferencesManager:
         prefs_file.write_text("just a string\n", encoding="utf-8")
         mgr = PreferencesManager(prefs_path=prefs_file)
         assert mgr.preferences.default_adapter == "opencode"
-

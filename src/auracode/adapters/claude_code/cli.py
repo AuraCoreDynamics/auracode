@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import sys
-
 import click
 
 from auracode.adapters.claude_code.formatter import format_response
@@ -44,7 +41,13 @@ def claude() -> None:
 
 
 @claude.command()
-@click.option("--context", "-c", multiple=True, type=click.Path(exists=False), help="File(s) to include as context.")
+@click.option(
+    "--context",
+    "-c",
+    multiple=True,
+    type=click.Path(exists=False),
+    help="File(s) to include as context.",
+)
 @click.option("--model", "-m", default=None, help="Model to use for inference.")
 @click.option("--json", "json_mode", is_flag=True, default=False, help="Output response as JSON.")
 def chat(context: tuple[str, ...], model: str | None, json_mode: bool) -> None:
@@ -65,7 +68,13 @@ def chat(context: tuple[str, ...], model: str | None, json_mode: bool) -> None:
 
 @claude.command()
 @click.argument("prompt")
-@click.option("--context", "-c", multiple=True, type=click.Path(exists=False), help="File(s) to include as context.")
+@click.option(
+    "--context",
+    "-c",
+    multiple=True,
+    type=click.Path(exists=False),
+    help="File(s) to include as context.",
+)
 @click.option("--model", "-m", default=None, help="Model to use for inference.")
 @click.option("--json", "json_mode", is_flag=True, default=False, help="Output response as JSON.")
 def do(prompt: str, context: tuple[str, ...], model: str | None, json_mode: bool) -> None:
@@ -76,7 +85,13 @@ def do(prompt: str, context: tuple[str, ...], model: str | None, json_mode: bool
 
 @claude.command()
 @click.argument("file", type=click.Path(exists=False))
-@click.option("--context", "-c", multiple=True, type=click.Path(exists=False), help="Additional context file(s).")
+@click.option(
+    "--context",
+    "-c",
+    multiple=True,
+    type=click.Path(exists=False),
+    help="Additional context file(s).",
+)
 @click.option("--model", "-m", default=None, help="Model to use for inference.")
 @click.option("--json", "json_mode", is_flag=True, default=False, help="Output response as JSON.")
 def explain(file: str, context: tuple[str, ...], model: str | None, json_mode: bool) -> None:
@@ -87,7 +102,13 @@ def explain(file: str, context: tuple[str, ...], model: str | None, json_mode: b
 
 @claude.command()
 @click.argument("file", type=click.Path(exists=False))
-@click.option("--context", "-c", multiple=True, type=click.Path(exists=False), help="Additional context file(s).")
+@click.option(
+    "--context",
+    "-c",
+    multiple=True,
+    type=click.Path(exists=False),
+    help="Additional context file(s).",
+)
 @click.option("--model", "-m", default=None, help="Model to use for inference.")
 @click.option("--json", "json_mode", is_flag=True, default=False, help="Output response as JSON.")
 def review(file: str, context: tuple[str, ...], model: str | None, json_mode: bool) -> None:

@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-from auracode.routing.base import AnalyzerInfo, ModelInfo, RouteResult, ServiceInfo
-
+from auracode.routing.base import AnalyzerInfo, ServiceInfo
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _import_backend():
     """(Re-)import EmbeddedRouterBackend so it picks up mocked modules."""
     import auracode.routing.embedded as mod
+
     importlib.reload(mod)
     return mod.EmbeddedRouterBackend
 
@@ -94,9 +94,7 @@ class TestListServices:
     @pytest.mark.usefixtures("_patch_aurarouter")
     async def test_exception_returns_empty(self, _patch_aurarouter):
         mocks = _patch_aurarouter
-        mocks["config_loader"].catalog_list = MagicMock(
-            side_effect=RuntimeError("boom")
-        )
+        mocks["config_loader"].catalog_list = MagicMock(side_effect=RuntimeError("boom"))
         cls = _import_backend()
         backend = cls()
 
@@ -131,9 +129,7 @@ class TestListAnalyzers:
                 "capabilities": ["reasoning"],
             },
         }
-        mocks["config_loader"] = _make_config_with_catalog(
-            catalog=catalog, active_analyzer="a1"
-        )
+        mocks["config_loader"] = _make_config_with_catalog(catalog=catalog, active_analyzer="a1")
         mocks["config_cls"].return_value = mocks["config_loader"]
 
         cls = _import_backend()
@@ -150,9 +146,7 @@ class TestListAnalyzers:
     @pytest.mark.usefixtures("_patch_aurarouter")
     async def test_exception_returns_empty(self, _patch_aurarouter):
         mocks = _patch_aurarouter
-        mocks["config_loader"].catalog_list = MagicMock(
-            side_effect=RuntimeError("fail")
-        )
+        mocks["config_loader"].catalog_list = MagicMock(side_effect=RuntimeError("fail"))
         cls = _import_backend()
         backend = cls()
 
@@ -179,9 +173,7 @@ class TestGetActiveAnalyzer:
                 "capabilities": ["code", "reasoning"],
             },
         }
-        mocks["config_loader"] = _make_config_with_catalog(
-            catalog=catalog, active_analyzer="a1"
-        )
+        mocks["config_loader"] = _make_config_with_catalog(catalog=catalog, active_analyzer="a1")
         mocks["config_cls"].return_value = mocks["config_loader"]
 
         cls = _import_backend()
@@ -209,9 +201,7 @@ class TestGetActiveAnalyzer:
     @pytest.mark.usefixtures("_patch_aurarouter")
     async def test_returns_none_when_id_not_in_catalog(self, _patch_aurarouter):
         mocks = _patch_aurarouter
-        mocks["config_loader"] = _make_config_with_catalog(
-            active_analyzer="nonexistent"
-        )
+        mocks["config_loader"] = _make_config_with_catalog(active_analyzer="nonexistent")
         mocks["config_cls"].return_value = mocks["config_loader"]
 
         cls = _import_backend()
@@ -223,9 +213,7 @@ class TestGetActiveAnalyzer:
     @pytest.mark.usefixtures("_patch_aurarouter")
     async def test_exception_returns_none(self, _patch_aurarouter):
         mocks = _patch_aurarouter
-        mocks["config_loader"].get_active_analyzer = MagicMock(
-            side_effect=RuntimeError("fail")
-        )
+        mocks["config_loader"].get_active_analyzer = MagicMock(side_effect=RuntimeError("fail"))
         cls = _import_backend()
         backend = cls()
 
@@ -250,9 +238,7 @@ class TestSetActiveAnalyzer:
 
         result = await backend.set_active_analyzer("new-analyzer")
         assert result is True
-        mocks["config_loader"].set_active_analyzer.assert_called_once_with(
-            "new-analyzer"
-        )
+        mocks["config_loader"].set_active_analyzer.assert_called_once_with("new-analyzer")
 
     @pytest.mark.usefixtures("_patch_aurarouter")
     async def test_clear_calls_config_with_none(self, _patch_aurarouter):
@@ -270,9 +256,7 @@ class TestSetActiveAnalyzer:
     @pytest.mark.usefixtures("_patch_aurarouter")
     async def test_exception_returns_false(self, _patch_aurarouter):
         mocks = _patch_aurarouter
-        mocks["config_loader"].set_active_analyzer = MagicMock(
-            side_effect=RuntimeError("fail")
-        )
+        mocks["config_loader"].set_active_analyzer = MagicMock(side_effect=RuntimeError("fail"))
         cls = _import_backend()
         backend = cls()
 
@@ -290,6 +274,7 @@ class TestStubBackendDefaults:
 
     async def test_list_services_empty(self):
         from auracode.app import _create_stub_backend
+
         stub = _create_stub_backend()
 
         services = await stub.list_services()
@@ -297,6 +282,7 @@ class TestStubBackendDefaults:
 
     async def test_list_analyzers_empty(self):
         from auracode.app import _create_stub_backend
+
         stub = _create_stub_backend()
 
         analyzers = await stub.list_analyzers()
@@ -304,6 +290,7 @@ class TestStubBackendDefaults:
 
     async def test_get_active_analyzer_none(self):
         from auracode.app import _create_stub_backend
+
         stub = _create_stub_backend()
 
         active = await stub.get_active_analyzer()
@@ -311,6 +298,7 @@ class TestStubBackendDefaults:
 
     async def test_set_active_analyzer_false(self):
         from auracode.app import _create_stub_backend
+
         stub = _create_stub_backend()
 
         result = await stub.set_active_analyzer("x")

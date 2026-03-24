@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from auracode.grid.client import GridDelegateBackend, GridRpcError
 from auracode.grid.messages import GridResponse, HealthStatus, ModelEntry, ModelList
 from auracode.models.request import RequestIntent
-from auracode.routing.base import ModelInfo
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -135,8 +133,6 @@ class TestHealthCheck:
 
 class TestClose:
     def test_close_resets_channel(self) -> None:
-        from unittest.mock import MagicMock
-
         backend = _make_backend()
         # Simulate an open channel.
         backend._channel = MagicMock()
@@ -170,7 +166,6 @@ class TestTlsAndTimeout:
 
     def test_ensure_channel_tls_creates_secure_channel(self, tmp_path) -> None:
         """With TLS params and real files, _ensure_channel creates a secure channel."""
-        from unittest.mock import MagicMock
 
         cert_file = tmp_path / "cert.pem"
         key_file = tmp_path / "key.pem"
@@ -205,7 +200,6 @@ class TestTlsAndTimeout:
 
     def test_ensure_channel_insecure_without_tls(self) -> None:
         """Without TLS params, _ensure_channel creates an insecure channel."""
-        from unittest.mock import MagicMock
 
         backend = _make_backend()
 
@@ -218,5 +212,3 @@ class TestTlsAndTimeout:
 
         fake_grpc_aio.insecure_channel.assert_called_once_with("localhost:50051")
         assert backend._channel is not None
-
-

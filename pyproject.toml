@@ -66,6 +66,7 @@ dev = [
     "pytest-asyncio",
     "pytest-aiohttp",
     "ruff",
+    "pre-commit",
     "auracode[all]",
 ]
 

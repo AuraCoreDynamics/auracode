@@ -13,7 +13,9 @@ class _DefaultGroup(click.Group):
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
         # If no args or only global options (--config), invoke the default (repl).
         # But if a known subcommand is present, let Click handle it normally.
-        if not args or (args and args[0].startswith("-") and args[0] not in ("--help", "--version")):
+        not_subcommand = args and args[0].startswith("-")
+        excluded = ("--help", "--version")
+        if not args or (not_subcommand and args[0] not in excluded):
             args = ["repl"] + args
         return super().parse_args(ctx, args)
 

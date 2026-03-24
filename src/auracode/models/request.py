@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
 
-class RequestIntent(str, Enum):
+class RequestIntent(StrEnum):
     """Classifies the purpose of an engine request."""
 
     GENERATE_CODE = "generate_code"

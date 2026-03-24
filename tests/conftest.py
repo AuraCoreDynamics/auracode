@@ -16,10 +16,10 @@ from auracode.models.request import (
 )
 from auracode.routing.base import BaseRouterBackend, ModelInfo, RouteResult
 
-
 # ---------------------------------------------------------------------------
 # Mock router backend
 # ---------------------------------------------------------------------------
+
 
 class MockRouterBackend(BaseRouterBackend):
     """Deterministic backend for testing."""
@@ -68,6 +68,7 @@ class FailingRouterBackend(BaseRouterBackend):
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def mock_backend() -> MockRouterBackend:

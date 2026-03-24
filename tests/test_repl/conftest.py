@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import click
 import pytest
 
 from auracode.adapters.base import BaseAdapter
@@ -15,8 +16,6 @@ from auracode.models.request import EngineRequest, EngineResponse, RequestIntent
 from auracode.repl.console import AuraCodeConsole
 from auracode.routing.base import BaseRouterBackend, ModelInfo, RouteResult
 
-import click
-
 
 class MockRouterBackend(BaseRouterBackend):
     """Router that echoes the prompt back as the response."""
@@ -26,7 +25,9 @@ class MockRouterBackend(BaseRouterBackend):
         self.last_intent: RequestIntent | None = None
 
     async def route(
-        self, prompt: str, intent: RequestIntent,
+        self,
+        prompt: str,
+        intent: RequestIntent,
         context: SessionContext | None = None,
         options: dict[str, Any] | None = None,
     ) -> RouteResult:

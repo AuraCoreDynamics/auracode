@@ -26,6 +26,7 @@ from auracode.routing.base import BaseRouterBackend
 # SessionManager
 # ---------------------------------------------------------------------------
 
+
 class TestSessionManager:
     def test_create(self) -> None:
         sm = SessionManager()
@@ -52,7 +53,11 @@ class TestSessionManager:
         assert updated.history[0]["role"] == "user"
         assert updated.history[1]["role"] == "assistant"
 
-    def test_update_missing_raises(self, sample_request: EngineRequest, sample_response: EngineResponse) -> None:
+    def test_update_missing_raises(
+        self,
+        sample_request: EngineRequest,
+        sample_response: EngineResponse,
+    ) -> None:
         sm = SessionManager()
         with pytest.raises(KeyError):
             sm.update("missing", sample_request, sample_response)
@@ -72,13 +77,22 @@ class TestSessionManager:
 # AuraCodeEngine
 # ---------------------------------------------------------------------------
 
+
 class TestAuraCodeEngine:
     @pytest.fixture()
-    def engine(self, default_config: AuraCodeConfig, mock_backend: BaseRouterBackend) -> AuraCodeEngine:
+    def engine(
+        self,
+        default_config: AuraCodeConfig,
+        mock_backend: BaseRouterBackend,
+    ) -> AuraCodeEngine:
         return AuraCodeEngine(config=default_config, router=mock_backend)
 
     @pytest.mark.asyncio
-    async def test_execute_success(self, engine: AuraCodeEngine, sample_request: EngineRequest) -> None:
+    async def test_execute_success(
+        self,
+        engine: AuraCodeEngine,
+        sample_request: EngineRequest,
+    ) -> None:
         resp = await engine.execute(sample_request)
         assert resp.request_id == sample_request.request_id
         assert "mock response" in resp.content
@@ -135,6 +149,7 @@ class TestAuraCodeEngine:
 # AdapterRegistry
 # ---------------------------------------------------------------------------
 
+
 class _StubAdapter(BaseAdapter):
     """Minimal concrete adapter for registry testing."""
 
@@ -184,6 +199,7 @@ class TestAdapterRegistry:
 # ---------------------------------------------------------------------------
 # BackendRegistry
 # ---------------------------------------------------------------------------
+
 
 class TestBackendRegistry:
     def test_register_and_get(self, mock_backend: BaseRouterBackend) -> None:

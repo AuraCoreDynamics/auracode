@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from auracode.grid.failover import FailoverBackend
 from auracode.models.context import SessionContext
-from auracode.models.request import RequestIntent, TokenUsage
+from auracode.models.request import RequestIntent
 from auracode.routing.base import (
     AnalyzerInfo,
     BaseRouterBackend,
@@ -16,7 +14,6 @@ from auracode.routing.base import (
     RouteResult,
     ServiceInfo,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helper backend with catalog support
@@ -89,14 +86,18 @@ class CatalogMockBackend(BaseRouterBackend):
 class TestFailoverListServices:
     async def test_merges_and_deduplicates(self):
         shared = ServiceInfo(service_id="svc-shared", display_name="Shared")
-        primary = CatalogMockBackend(services=[
-            ServiceInfo(service_id="svc-p", display_name="Primary"),
-            shared,
-        ])
-        fallback = CatalogMockBackend(services=[
-            ServiceInfo(service_id="svc-f", display_name="Fallback"),
-            shared,
-        ])
+        primary = CatalogMockBackend(
+            services=[
+                ServiceInfo(service_id="svc-p", display_name="Primary"),
+                shared,
+            ]
+        )
+        fallback = CatalogMockBackend(
+            services=[
+                ServiceInfo(service_id="svc-f", display_name="Fallback"),
+                shared,
+            ]
+        )
 
         fo = FailoverBackend(primary, fallback)
         services = await fo.list_services()
@@ -108,9 +109,11 @@ class TestFailoverListServices:
 
     async def test_primary_failure_returns_fallback(self):
         primary = CatalogMockBackend(catalog_error=RuntimeError("boom"))
-        fallback = CatalogMockBackend(services=[
-            ServiceInfo(service_id="svc-f", display_name="Fallback"),
-        ])
+        fallback = CatalogMockBackend(
+            services=[
+                ServiceInfo(service_id="svc-f", display_name="Fallback"),
+            ]
+        )
 
         fo = FailoverBackend(primary, fallback)
         services = await fo.list_services()
@@ -121,14 +124,18 @@ class TestFailoverListServices:
 class TestFailoverListAnalyzers:
     async def test_merges_and_deduplicates(self):
         shared = AnalyzerInfo(analyzer_id="a-shared", display_name="Shared")
-        primary = CatalogMockBackend(analyzers=[
-            AnalyzerInfo(analyzer_id="a-p", display_name="Primary"),
-            shared,
-        ])
-        fallback = CatalogMockBackend(analyzers=[
-            AnalyzerInfo(analyzer_id="a-f", display_name="Fallback"),
-            shared,
-        ])
+        primary = CatalogMockBackend(
+            analyzers=[
+                AnalyzerInfo(analyzer_id="a-p", display_name="Primary"),
+                shared,
+            ]
+        )
+        fallback = CatalogMockBackend(
+            analyzers=[
+                AnalyzerInfo(analyzer_id="a-f", display_name="Fallback"),
+                shared,
+            ]
+        )
 
         fo = FailoverBackend(primary, fallback)
         analyzers = await fo.list_analyzers()

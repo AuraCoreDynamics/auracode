@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Awaitable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from auracode.repl.console import AuraCodeConsole
@@ -15,7 +16,7 @@ class SlashCommand:
 
     name: str
     description: str
-    handler: Callable[["AuraCodeConsole", str], Awaitable[str | None]]
+    handler: Callable[[AuraCodeConsole, str], Awaitable[str | None]]
     aliases: list[str] = field(default_factory=list)
 
 
@@ -49,7 +50,7 @@ def all_commands() -> list[SlashCommand]:
 # ── Built-in command handlers ──────────────────────────────────────────
 
 
-async def _handle_help(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_help(console: AuraCodeConsole, args: str) -> str | None:
     """Show available slash commands."""
     lines = ["", "Available commands:"]
     for cmd in all_commands():
@@ -62,7 +63,7 @@ async def _handle_help(console: "AuraCodeConsole", args: str) -> str | None:
     return "\n".join(lines)
 
 
-async def _handle_status(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_status(console: AuraCodeConsole, args: str) -> str | None:
     """Show engine health."""
     healthy = await console.engine.router.health_check()
     models = await console.engine.router.list_models()
@@ -77,13 +78,14 @@ async def _handle_status(console: "AuraCodeConsole", args: str) -> str | None:
         f"  Active adapter:  {adapter_name}",
         f"  Active analyzer: {analyzer_name}",
         f"  Router:          {'healthy' if healthy else 'unavailable'}",
-        f"  Catalog:         {len(models)} models, {len(services)} services, {len(analyzers)} analyzers",
+        f"  Catalog:         {len(models)} models, "
+        f"{len(services)} services, {len(analyzers)} analyzers",
         f"  Session history: {len(console.session_history)} messages",
     ]
     return "\n".join(lines)
 
 
-async def _handle_catalog(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_catalog(console: AuraCodeConsole, args: str) -> str | None:
     """List the full catalog: models, services, and analyzers."""
     filter_kind = args.strip().lower() if args.strip() else None
     lines = []
@@ -124,7 +126,7 @@ async def _handle_catalog(console: "AuraCodeConsole", args: str) -> str | None:
     return "\n".join(lines)
 
 
-async def _handle_analyzer(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_analyzer(console: AuraCodeConsole, args: str) -> str | None:
     """View or switch the active route analyzer."""
     name = args.strip()
     if not name:
@@ -160,7 +162,7 @@ async def _handle_analyzer(console: "AuraCodeConsole", args: str) -> str | None:
         return f"Failed to set analyzer '{name}'. Use /analyzer to see available options."
 
 
-async def _handle_adapter(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_adapter(console: AuraCodeConsole, args: str) -> str | None:
     """Switch the active adapter/vendor persona."""
     name = args.strip()
     if not name:
@@ -189,29 +191,30 @@ async def _handle_adapter(console: "AuraCodeConsole", args: str) -> str | None:
     return f"Switched to {adapter.name}."
 
 
-async def _handle_claude(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_claude(console: AuraCodeConsole, args: str) -> str | None:
     """Switch to Claude Code adapter."""
     return await _handle_adapter(console, "claude-code")
 
 
-async def _handle_copilot(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_copilot(console: AuraCodeConsole, args: str) -> str | None:
     """Switch to Copilot adapter."""
     return await _handle_adapter(console, "copilot")
 
 
-async def _handle_aider(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_aider(console: AuraCodeConsole, args: str) -> str | None:
     """Switch to Aider adapter."""
     return await _handle_adapter(console, "aider")
 
 
-async def _handle_codestral(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_codestral(console: AuraCodeConsole, args: str) -> str | None:
     """Switch to Codestral adapter."""
     return await _handle_adapter(console, "codestral")
 
 
-async def _handle_context(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_context(console: AuraCodeConsole, args: str) -> str | None:
     """Add or list context files."""
     from pathlib import Path
+
     from auracode.models.context import FileContext
 
     path_str = args.strip()
@@ -240,7 +243,7 @@ async def _handle_context(console: "AuraCodeConsole", args: str) -> str | None:
     return f"Added {p.name} ({len(content)} chars) to context."
 
 
-async def _handle_clear(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_clear(console: AuraCodeConsole, args: str) -> str | None:
     """Clear session history and context."""
     what = args.strip().lower()
     if what == "context":
@@ -255,13 +258,13 @@ async def _handle_clear(console: "AuraCodeConsole", args: str) -> str | None:
         return "Session history and context cleared."
 
 
-async def _handle_quit(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_quit(console: AuraCodeConsole, args: str) -> str | None:
     """Exit the REPL."""
     console.running = False
     return None
 
 
-async def _handle_prefs(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_prefs(console: AuraCodeConsole, args: str) -> str | None:
     """View or set persistent preferences."""
     if not hasattr(console, "preferences_manager") or console.preferences_manager is None:
         return "Preferences manager not available."
@@ -284,6 +287,7 @@ async def _handle_prefs(console: "AuraCodeConsole", args: str) -> str | None:
 
     if subcmd == "reset":
         from auracode.models.preferences import UserPreferences
+
         # Reset to defaults
         data = UserPreferences().model_dump()
         for k, v in data.items():
@@ -301,7 +305,7 @@ async def _handle_prefs(console: "AuraCodeConsole", args: str) -> str | None:
     return "\n".join(lines)
 
 
-async def _handle_explain(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_explain(console: AuraCodeConsole, args: str) -> str | None:
     """Explain a file (shortcut for 'explain <file>' prompt)."""
     path = args.strip()
     if not path:
@@ -309,7 +313,7 @@ async def _handle_explain(console: "AuraCodeConsole", args: str) -> str | None:
     return await console.send_prompt(f"explain {path}", intent_hint="explain")
 
 
-async def _handle_review(console: "AuraCodeConsole", args: str) -> str | None:
+async def _handle_review(console: AuraCodeConsole, args: str) -> str | None:
     """Review a file (shortcut for 'review <file>' prompt)."""
     path = args.strip()
     if not path:
@@ -323,7 +327,14 @@ def register_builtin_commands() -> None:
 
     register(SlashCommand("help", "Show this help message", _handle_help, ["h", "?"]))
     register(SlashCommand("status", "Show engine health and session info", _handle_status))
-    register(SlashCommand("catalog", "List models, services, and analyzers", _handle_catalog, ["models"]))
+    register(
+        SlashCommand(
+            "catalog",
+            "List models, services, and analyzers",
+            _handle_catalog,
+            ["models"],
+        )
+    )
     register(SlashCommand("analyzer", "View or switch route analyzer", _handle_analyzer))
     register(SlashCommand("adapter", "Switch or list adapters", _handle_adapter))
     register(SlashCommand("claude", "Switch to Claude Code adapter", _handle_claude))
@@ -332,7 +343,14 @@ def register_builtin_commands() -> None:
     register(SlashCommand("codestral", "Switch to Codestral adapter", _handle_codestral))
     register(SlashCommand("context", "Add or list context files", _handle_context, ["ctx"]))
     register(SlashCommand("clear", "Clear history and/or context", _handle_clear))
-    register(SlashCommand("prefs", "View or set persistent preferences", _handle_prefs, ["preferences"]))
+    register(
+        SlashCommand(
+            "prefs",
+            "View or set persistent preferences",
+            _handle_prefs,
+            ["preferences"],
+        )
+    )
     register(SlashCommand("explain", "Explain a file", _handle_explain))
     register(SlashCommand("review", "Review a file", _handle_review))
     register(SlashCommand("quit", "Exit AuraCode", _handle_quit, ["q", "exit"]))

@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # POST /v1/chat/completions — non-streaming
 # ---------------------------------------------------------------------------
@@ -103,7 +100,7 @@ async def test_chat_completions_stream(client):
     text = raw.decode("utf-8")
 
     # Should contain data lines and [DONE]
-    lines = [l for l in text.split("\n") if l.startswith("data: ")]
+    lines = [line for line in text.split("\n") if line.startswith("data: ")]
     assert len(lines) >= 2  # content chunk + stop chunk + [DONE]
 
     # First chunk should have content

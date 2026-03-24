@@ -11,11 +11,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Synthetic aurarouter package — inserted into sys.modules so that
 # ``from aurarouter.config import ConfigLoader`` etc. resolve to mocks.
 # ---------------------------------------------------------------------------
+
 
 def _build_mock_config_loader(config: dict | None = None) -> MagicMock:
     """Create a mock that behaves like ``aurarouter.config.ConfigLoader``."""
@@ -37,12 +37,8 @@ def _build_mock_config_loader(config: dict | None = None) -> MagicMock:
     loader.get_model_config = MagicMock(
         side_effect=lambda mid: dict(cfg.get("models", {}).get(mid, {}))
     )
-    loader.get_all_model_ids = MagicMock(
-        return_value=list(cfg.get("models", {}).keys())
-    )
-    loader.get_all_roles = MagicMock(
-        return_value=list(cfg.get("roles", {}).keys())
-    )
+    loader.get_all_model_ids = MagicMock(return_value=list(cfg.get("models", {}).keys()))
+    loader.get_all_roles = MagicMock(return_value=list(cfg.get("roles", {}).keys()))
 
     # Catalog methods
     _catalog = cfg.get("catalog", {})
@@ -145,20 +141,22 @@ def _patch_aurarouter(mock_config_loader, mock_fabric):
 def mock_registry() -> MagicMock:
     """Mock for ``aurarouter.mcp_client.registry.McpClientRegistry``."""
     registry = MagicMock()
-    registry.get_all_remote_tools = MagicMock(return_value=[
-        {
-            "name": "read_file",
-            "description": "Read file contents",
-            "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}},
-            "_source_client": "grid-node-1",
-        },
-        {
-            "name": "run_command",
-            "description": "Execute a shell command",
-            "inputSchema": {},
-            "_source_client": "grid-node-1",
-        },
-    ])
+    registry.get_all_remote_tools = MagicMock(
+        return_value=[
+            {
+                "name": "read_file",
+                "description": "Read file contents",
+                "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}},
+                "_source_client": "grid-node-1",
+            },
+            {
+                "name": "run_command",
+                "description": "Execute a shell command",
+                "inputSchema": {},
+                "_source_client": "grid-node-1",
+            },
+        ]
+    )
 
     # Build a mock client that owns the tools.
     mock_client = MagicMock()

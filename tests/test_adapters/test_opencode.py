@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from auracode.adapters.loader import discover_adapters
 from auracode.adapters.opencode.adapter import OpenCodeAdapter
 from auracode.adapters.opencode.formatter import format_response
-from auracode.adapters.loader import discover_adapters
 from auracode.engine.registry import AdapterRegistry
 from auracode.models.request import (
     EngineResponse,
@@ -102,7 +102,11 @@ class TestOpenCodeAdapter:
         assert req.options == {"model": "opus"}
 
     @pytest.mark.asyncio
-    async def test_translate_request_with_context_files(self, adapter: OpenCodeAdapter, tmp_path) -> None:
+    async def test_translate_request_with_context_files(
+        self,
+        adapter: OpenCodeAdapter,
+        tmp_path,
+    ) -> None:
         test_file = tmp_path / "example.py"
         test_file.write_text("print('hi')", encoding="utf-8")
         raw = {"prompt": "Explain this", "intent": "explain", "context_files": [str(test_file)]}
@@ -118,7 +122,11 @@ class TestOpenCodeAdapter:
             await adapter.translate_request("not a dict")
 
     @pytest.mark.asyncio
-    async def test_translate_response(self, adapter: OpenCodeAdapter, sample_response: EngineResponse) -> None:
+    async def test_translate_response(
+        self,
+        adapter: OpenCodeAdapter,
+        sample_response: EngineResponse,
+    ) -> None:
         result = await adapter.translate_response(sample_response)
         assert isinstance(result, str)
         assert "Here is your code:" in result
@@ -173,4 +181,3 @@ class TestOpenCodeDiscovery:
         registry = AdapterRegistry()
         discover_adapters(registry)
         assert "opencode" in registry.list_adapters()
-

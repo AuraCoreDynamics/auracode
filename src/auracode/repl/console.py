@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Any
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -31,12 +30,14 @@ _INTENT_PREFIXES: dict[str, RequestIntent] = {
     "complete": RequestIntent.COMPLETE_CODE,
 }
 
-_THEME = Theme({
-    "prompt": "bold cyan",
-    "adapter": "bold green",
-    "info": "dim",
-    "error": "bold red",
-})
+_THEME = Theme(
+    {
+        "prompt": "bold cyan",
+        "adapter": "bold green",
+        "info": "dim",
+        "error": "bold red",
+    }
+)
 
 
 class AuraCodeConsole:
@@ -54,7 +55,7 @@ class AuraCodeConsole:
         adapter_registry: AdapterRegistry,
         *,
         default_adapter_name: str = "opencode",
-        preferences_manager: "PreferencesManager | None" = None,
+        preferences_manager: PreferencesManager | None = None,
     ) -> None:
         self.engine = engine
         self.adapter_registry = adapter_registry
@@ -64,11 +65,12 @@ class AuraCodeConsole:
         self.session_id: str = uuid.uuid4().hex
         self.running: bool = False
         self.rich = Console(theme=_THEME)
-        self.preferences_manager: "PreferencesManager | None" = preferences_manager
+        self.preferences_manager: PreferencesManager | None = preferences_manager
         self._active_analyzer_id: str | None = None
 
         # Register slash commands.
         from auracode.repl.commands import register_builtin_commands
+
         register_builtin_commands()
 
     # ── Prompt handling ────────────────────────────────────────────────
@@ -89,9 +91,7 @@ class AuraCodeConsole:
             history=list(self.session_history),
         )
 
-    async def send_prompt(
-        self, text: str, *, intent_hint: str | None = None
-    ) -> str | None:
+    async def send_prompt(self, text: str, *, intent_hint: str | None = None) -> str | None:
         """Send a prompt through the active adapter and engine, return formatted output."""
         if self.active_adapter is None:
             return "No adapter active. Use /adapter <name> to select one."
@@ -155,7 +155,7 @@ class AuraCodeConsole:
         adapter_name = self.active_adapter.name if self.active_adapter else "auracode"
         # Show non-default analyzer in prompt
         analyzer_hint = ""
-        if hasattr(self, '_active_analyzer_id') and self._active_analyzer_id:
+        if hasattr(self, "_active_analyzer_id") and self._active_analyzer_id:
             if self._active_analyzer_id != "aurarouter-default":
                 analyzer_hint = f":{self._active_analyzer_id}"
         return f"{adapter_name}{analyzer_hint}> "
@@ -176,9 +176,7 @@ class AuraCodeConsole:
         self.rich.print(Panel(banner_text, border_style="cyan", padding=(1, 2)))
 
         if self.active_adapter:
-            self.rich.print(
-                f"[adapter]Active adapter: {self.active_adapter.name}[/adapter]\n"
-            )
+            self.rich.print(f"[adapter]Active adapter: {self.active_adapter.name}[/adapter]\n")
 
     def _print_output(self, text: str) -> None:
         """Print a response, rendering markdown if rich is available."""

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from auracode.grid.messages import GridRequest, GridResponse
 from auracode.models.context import SessionContext
 from auracode.models.request import RequestIntent, TokenUsage
-from auracode.routing.base import ModelInfo, RouteResult
+from auracode.routing.base import RouteResult
 
 
 def engine_request_to_grid(

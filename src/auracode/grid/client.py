@@ -7,7 +7,6 @@ import uuid
 from typing import Any
 
 from auracode.grid.messages import (
-    Empty,
     GridResponse,
     HealthStatus,
     ModelList,

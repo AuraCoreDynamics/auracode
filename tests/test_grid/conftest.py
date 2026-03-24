@@ -6,11 +6,9 @@ from typing import Any
 
 import pytest
 
-from auracode.grid.messages import GridResponse, HealthStatus, ModelEntry, ModelList
 from auracode.models.context import SessionContext
 from auracode.models.request import RequestIntent, TokenUsage
 from auracode.routing.base import BaseRouterBackend, ModelInfo, RouteResult
-
 
 # ---------------------------------------------------------------------------
 # Mock backends for failover testing

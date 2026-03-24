@@ -17,7 +17,9 @@ def test_create_app_returns_application(mock_engine):
 def test_create_app_has_routes(mock_engine):
     """All expected routes are registered."""
     app = create_app(mock_engine)
-    routes = {r.resource.canonical for r in app.router.routes() if hasattr(r, "resource") and r.resource}
+    routes = {
+        r.resource.canonical for r in app.router.routes() if hasattr(r, "resource") and r.resource
+    }
     assert "/v1/chat/completions" in routes
     assert "/v1/completions" in routes
     assert "/v1/models" in routes

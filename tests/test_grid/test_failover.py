@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
-
 from auracode.grid.failover import FailoverBackend
 from auracode.models.context import FileContext, SessionContext
 from auracode.models.request import RequestIntent
-from auracode.routing.base import ModelInfo, RouteResult
+from auracode.routing.base import ModelInfo
 
 from .conftest import MockBackend
 
@@ -69,9 +67,7 @@ class TestRouteFailover:
 
         assert result.content == "fallback answer"
 
-    async def test_health_check_error_falls_back(
-        self, healthy_fallback: MockBackend
-    ) -> None:
+    async def test_health_check_error_falls_back(self, healthy_fallback: MockBackend) -> None:
         primary = MockBackend(health_error=ConnectionError("timeout"))
         fo = FailoverBackend(primary, healthy_fallback)
         result = await fo.route("prompt", RequestIntent.CHAT)
@@ -100,9 +96,11 @@ class TestListModels:
         self, healthy_fallback: MockBackend
     ) -> None:
         primary = MockBackend(healthy=True)
+
         # Override list_models to raise.
         async def _boom() -> list[ModelInfo]:
             raise RuntimeError("list failed")
+
         primary.list_models = _boom  # type: ignore[assignment]
 
         fo = FailoverBackend(primary, healthy_fallback)

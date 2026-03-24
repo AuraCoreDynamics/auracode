@@ -71,9 +71,7 @@ def _format_chat_response(
         "usage": {
             "prompt_tokens": usage.prompt_tokens if usage else 0,
             "completion_tokens": usage.completion_tokens if usage else 0,
-            "total_tokens": (
-                (usage.prompt_tokens + usage.completion_tokens) if usage else 0
-            ),
+            "total_tokens": ((usage.prompt_tokens + usage.completion_tokens) if usage else 0),
         },
     }
 
@@ -98,9 +96,7 @@ def _format_completion_response(
         "usage": {
             "prompt_tokens": usage.prompt_tokens if usage else 0,
             "completion_tokens": usage.completion_tokens if usage else 0,
-            "total_tokens": (
-                (usage.prompt_tokens + usage.completion_tokens) if usage else 0
-            ),
+            "total_tokens": ((usage.prompt_tokens + usage.completion_tokens) if usage else 0),
         },
     }
 
@@ -153,9 +149,7 @@ async def chat_completions(request: web.Request) -> web.StreamResponse:
     if stream:
         return await _stream_response(request, response, used_model, completion_id)
 
-    return web.json_response(
-        _format_chat_response(response, used_model, completion_id)
-    )
+    return web.json_response(_format_chat_response(response, used_model, completion_id))
 
 
 async def _stream_response(
@@ -190,9 +184,7 @@ async def _stream_response(
             }
         ],
     }
-    await stream_response.write(
-        f"data: {json.dumps(chunk_data)}\n\n".encode("utf-8")
-    )
+    await stream_response.write(f"data: {json.dumps(chunk_data)}\n\n".encode())
 
     # Send the final stop chunk.
     stop_data = {
@@ -208,9 +200,7 @@ async def _stream_response(
             }
         ],
     }
-    await stream_response.write(
-        f"data: {json.dumps(stop_data)}\n\n".encode("utf-8")
-    )
+    await stream_response.write(f"data: {json.dumps(stop_data)}\n\n".encode())
     await stream_response.write(b"data: [DONE]\n\n")
     await stream_response.write_eof()
     return stream_response
@@ -248,15 +238,11 @@ async def completions(request: web.Request) -> web.StreamResponse:
     if max_tokens is not None:
         options["max_tokens"] = max_tokens
 
-    engine_request = _build_engine_request(
-        prompt, [], RequestIntent.COMPLETE_CODE, options
-    )
+    engine_request = _build_engine_request(prompt, [], RequestIntent.COMPLETE_CODE, options)
     engine = request.app["engine"]
     response: EngineResponse = await engine.execute(engine_request)
 
     completion_id = _generate_id()
     used_model = response.model_used or model
 
-    return web.json_response(
-        _format_completion_response(response, used_model, completion_id)
-    )
+    return web.json_response(_format_completion_response(response, used_model, completion_id))

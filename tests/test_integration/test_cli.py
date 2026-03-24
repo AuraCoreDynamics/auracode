@@ -72,7 +72,6 @@ class TestServeCommand:
     def test_serve_import_error_message(self, runner):
         """Verify that missing aiohttp produces an error message containing 'aiohttp'."""
         import sys
-        import types
 
         # Temporarily hide aiohttp to trigger the ImportError path
         saved = sys.modules.get("aiohttp")
@@ -92,4 +91,3 @@ class TestServeCommand:
                 sys.modules.pop("aiohttp.web", None)
         assert result.exit_code != 0
         assert "aiohttp" in result.output
-

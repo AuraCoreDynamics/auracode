@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import sys
 import types
-import uuid
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from auracode.models.request import EngineResponse, RequestIntent, TokenUsage
 from auracode.routing.base import ModelInfo
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -124,6 +122,7 @@ class TestMcpTools:
                 def decorator(fn):
                     registered_tools[fn.__name__] = fn
                     return fn
+
                 return decorator
 
         fake_mcp = types.ModuleType("mcp")
@@ -166,7 +165,7 @@ class TestMcpTools:
 
     async def test_auracode_generate_with_custom_intent(self, tools_and_engine) -> None:
         tools, engine = tools_and_engine
-        result = await tools["auracode_generate"]("Review my code", intent="review")
+        await tools["auracode_generate"]("Review my code", intent="review")
 
         call_args = engine.execute.call_args[0][0]
         assert call_args.intent == RequestIntent.REVIEW
@@ -185,10 +184,12 @@ class TestMcpTools:
         class FakeFastMCP:
             def __init__(self, name: str):
                 pass
+
             def tool(self):
                 def decorator(fn):
                     registered_tools[fn.__name__] = fn
                     return fn
+
                 return decorator
 
         fake_mcp = types.ModuleType("mcp")
@@ -201,6 +202,7 @@ class TestMcpTools:
         sys.modules["mcp.server"] = fake_mcp_server
         try:
             from auracode.mcp_server import create_mcp_server
+
             engine = _make_mock_engine(response_content="", response_error="model overloaded")
             create_mcp_server(engine)
         finally:
@@ -217,7 +219,11 @@ class TestMcpTools:
         assert result.startswith("Error:")
         assert "model overloaded" in result
 
-    async def test_auracode_explain_creates_explain_request(self, tools_and_engine, tmp_path) -> None:
+    async def test_auracode_explain_creates_explain_request(
+        self,
+        tools_and_engine,
+        tmp_path,
+    ) -> None:
         tools, engine = tools_and_engine
         # Create a real temp file so explain can read it
         test_file = tmp_path / "sample.py"

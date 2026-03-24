@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
-import pytest
-
 from auracode.app import create_application, load_config
 from auracode.engine.core import AuraCodeEngine
 from auracode.engine.preferences import PreferencesManager
@@ -88,4 +84,5 @@ class TestCreateApplication:
         assert engine.router is not None
         # The router should implement the BaseRouterBackend interface
         from auracode.routing.base import BaseRouterBackend
+
         assert isinstance(engine.router, BaseRouterBackend)

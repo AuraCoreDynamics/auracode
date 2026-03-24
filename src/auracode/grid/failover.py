@@ -112,9 +112,7 @@ class FailoverBackend(BaseRouterBackend):
                     if m.model_id not in seen:
                         seen[m.model_id] = m
             except Exception:
-                logger.debug(
-                    "list_models failed for %s", type(backend).__name__, exc_info=True
-                )
+                logger.debug("list_models failed for %s", type(backend).__name__, exc_info=True)
 
         return list(seen.values())
 
@@ -143,7 +141,8 @@ class FailoverBackend(BaseRouterBackend):
                         seen[s.service_id] = s
             except Exception:
                 logger.debug(
-                    "list_services failed for %s", type(backend).__name__,
+                    "list_services failed for %s",
+                    type(backend).__name__,
                     exc_info=True,
                 )
         return list(seen.values())
@@ -159,7 +158,8 @@ class FailoverBackend(BaseRouterBackend):
                         seen[a.analyzer_id] = a
             except Exception:
                 logger.debug(
-                    "list_analyzers failed for %s", type(backend).__name__,
+                    "list_analyzers failed for %s",
+                    type(backend).__name__,
                     exc_info=True,
                 )
         return list(seen.values())

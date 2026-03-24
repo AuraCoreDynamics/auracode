@@ -7,7 +7,7 @@ import json
 from auracode.grid.messages import GridRequest, GridResponse
 from auracode.grid.serializer import engine_request_to_grid, grid_response_to_route_result
 from auracode.models.context import FileContext, SessionContext
-from auracode.models.request import RequestIntent, TokenUsage
+from auracode.models.request import RequestIntent
 
 
 class TestEngineRequestToGrid:

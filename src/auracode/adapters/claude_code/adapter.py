@@ -12,7 +12,6 @@ from auracode.adapters.base import BaseAdapter
 from auracode.models.context import FileContext, SessionContext
 from auracode.models.request import EngineRequest, EngineResponse, RequestIntent
 
-
 # Maps raw intent strings (as sent by the CLI layer) to RequestIntent enums.
 _INTENT_MAP: dict[str, RequestIntent] = {
     "chat": RequestIntent.CHAT,

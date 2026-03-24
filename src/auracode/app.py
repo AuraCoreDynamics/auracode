@@ -8,10 +8,10 @@ from typing import Any
 import structlog
 import yaml
 
+from auracode.adapters.loader import discover_adapters
 from auracode.engine.core import AuraCodeEngine
 from auracode.engine.preferences import PreferencesManager
 from auracode.engine.registry import AdapterRegistry, BackendRegistry
-from auracode.adapters.loader import discover_adapters
 from auracode.models.config import AuraCodeConfig
 from auracode.util.logging import configure_logging
 
@@ -135,13 +135,9 @@ def create_application(
             if loop and loop.is_running():
                 # Already inside an event loop — schedule as a task.
                 # The preference will be applied once the loop processes it.
-                loop.create_task(
-                    default_backend.set_active_analyzer(prefs.active_analyzer)
-                )
+                loop.create_task(default_backend.set_active_analyzer(prefs.active_analyzer))
             else:
-                _aio.run(
-                    default_backend.set_active_analyzer(prefs.active_analyzer)
-                )
+                _aio.run(default_backend.set_active_analyzer(prefs.active_analyzer))
         except Exception:
             pass  # Non-critical — analyzer preference is best-effort
 
@@ -158,9 +154,9 @@ def create_application(
 
 def _create_stub_backend():
     """Create a stub backend that returns helpful error messages."""
-    from auracode.routing.base import BaseRouterBackend, ModelInfo, RouteResult
     from auracode.models.context import SessionContext
     from auracode.models.request import RequestIntent
+    from auracode.routing.base import BaseRouterBackend, ModelInfo, RouteResult
 
     class StubBackend(BaseRouterBackend):
         """Placeholder backend when no real router is configured."""
@@ -173,7 +169,10 @@ def _create_stub_backend():
             options: dict[str, Any] | None = None,
         ) -> RouteResult:
             return RouteResult(
-                content="No routing backend configured. Install AuraRouter or configure a grid endpoint.",
+                content=(
+                    "No routing backend configured. "
+                    "Install AuraRouter or configure a grid endpoint."
+                ),
                 model_used="none",
             )
 

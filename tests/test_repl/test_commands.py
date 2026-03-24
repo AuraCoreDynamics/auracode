@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from auracode.repl.commands import register_builtin_commands, get, all_commands
+from auracode.repl.commands import all_commands, get, register_builtin_commands
 from auracode.repl.console import AuraCodeConsole
 
 
@@ -36,9 +36,23 @@ class TestCommandRegistry:
         assert len(names) == len(set(names))
 
     def test_expected_commands_exist(self):
-        expected = {"help", "status", "catalog", "analyzer", "adapter", "claude",
-                    "copilot", "aider", "codestral", "context", "clear", "explain",
-                    "review", "quit", "prefs"}
+        expected = {
+            "help",
+            "status",
+            "catalog",
+            "analyzer",
+            "adapter",
+            "claude",
+            "copilot",
+            "aider",
+            "codestral",
+            "context",
+            "clear",
+            "explain",
+            "review",
+            "quit",
+            "prefs",
+        }
         actual = {c.name for c in all_commands()}
         assert expected == actual
 
@@ -71,7 +85,7 @@ class TestAdapterSwitching:
 
     async def test_switch_back(self, console: AuraCodeConsole):
         await console._dispatch_command("/adapter copilot")
-        result = await console._dispatch_command("/adapter claude-code")
+        await console._dispatch_command("/adapter claude-code")
         assert console.active_adapter.name == "claude-code"
 
     async def test_claude_shortcut(self, console: AuraCodeConsole):
@@ -158,6 +172,7 @@ class TestClearCommand:
     async def test_clear_all(self, console: AuraCodeConsole):
         console.session_history.append({"role": "user", "content": "test"})
         from auracode.models.context import FileContext
+
         console.context_files.append(FileContext(path="x.py", content="x"))
         result = await console._dispatch_command("/clear")
         assert console.session_history == []
@@ -167,6 +182,7 @@ class TestClearCommand:
     async def test_clear_history_only(self, console: AuraCodeConsole):
         console.session_history.append({"role": "user", "content": "test"})
         from auracode.models.context import FileContext
+
         console.context_files.append(FileContext(path="x.py", content="x"))
         await console._dispatch_command("/clear history")
         assert console.session_history == []
@@ -175,6 +191,7 @@ class TestClearCommand:
     async def test_clear_context_only(self, console: AuraCodeConsole):
         console.session_history.append({"role": "user", "content": "test"})
         from auracode.models.context import FileContext
+
         console.context_files.append(FileContext(path="x.py", content="x"))
         await console._dispatch_command("/clear context")
         assert len(console.session_history) == 1
@@ -233,6 +250,7 @@ class TestPrefsCommand:
 
     async def test_prefs_show_all(self, console: AuraCodeConsole, tmp_path):
         from auracode.engine.preferences import PreferencesManager
+
         prefs_file = tmp_path / "prefs.yaml"
         console.preferences_manager = PreferencesManager(prefs_path=prefs_file)
         result = await console._dispatch_command("/prefs")
@@ -242,6 +260,7 @@ class TestPrefsCommand:
 
     async def test_prefs_set(self, console: AuraCodeConsole, tmp_path):
         from auracode.engine.preferences import PreferencesManager
+
         prefs_file = tmp_path / "prefs.yaml"
         console.preferences_manager = PreferencesManager(prefs_path=prefs_file)
         result = await console._dispatch_command("/prefs set history_limit 50")
@@ -250,6 +269,7 @@ class TestPrefsCommand:
 
     async def test_prefs_set_unknown_key(self, console: AuraCodeConsole, tmp_path):
         from auracode.engine.preferences import PreferencesManager
+
         prefs_file = tmp_path / "prefs.yaml"
         console.preferences_manager = PreferencesManager(prefs_path=prefs_file)
         result = await console._dispatch_command("/prefs set nonexistent value")
@@ -257,6 +277,7 @@ class TestPrefsCommand:
 
     async def test_prefs_set_missing_args(self, console: AuraCodeConsole, tmp_path):
         from auracode.engine.preferences import PreferencesManager
+
         prefs_file = tmp_path / "prefs.yaml"
         console.preferences_manager = PreferencesManager(prefs_path=prefs_file)
         result = await console._dispatch_command("/prefs set")
@@ -264,6 +285,7 @@ class TestPrefsCommand:
 
     async def test_prefs_reset(self, console: AuraCodeConsole, tmp_path):
         from auracode.engine.preferences import PreferencesManager
+
         prefs_file = tmp_path / "prefs.yaml"
         console.preferences_manager = PreferencesManager(prefs_path=prefs_file)
         # Change something first
@@ -275,6 +297,7 @@ class TestPrefsCommand:
 
     async def test_prefs_alias(self, console: AuraCodeConsole, tmp_path):
         from auracode.engine.preferences import PreferencesManager
+
         prefs_file = tmp_path / "prefs.yaml"
         console.preferences_manager = PreferencesManager(prefs_path=prefs_file)
         result = await console._dispatch_command("/preferences")
@@ -324,7 +347,7 @@ class TestCatalogCommand:
 
     async def test_catalog_with_services_and_analyzers(self, console: AuraCodeConsole):
         """Test catalog with non-empty services and analyzers."""
-        from auracode.routing.base import ServiceInfo, AnalyzerInfo
+        from auracode.routing.base import AnalyzerInfo, ServiceInfo
 
         async def mock_list_services():
             return [

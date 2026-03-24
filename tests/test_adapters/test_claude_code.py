@@ -14,13 +14,12 @@ from auracode.models.request import (
     EngineResponse,
     FileArtifact,
     RequestIntent,
-    TokenUsage,
 )
-
 
 # ---------------------------------------------------------------------------
 # Adapter unit tests
 # ---------------------------------------------------------------------------
+
 
 class TestClaudeCodeAdapter:
     def test_name(self, claude_code_adapter: ClaudeCodeAdapter) -> None:
@@ -54,19 +53,29 @@ class TestClaudeCodeAdapter:
         assert req.intent == RequestIntent.REVIEW
 
     @pytest.mark.asyncio
-    async def test_translate_request_default_intent(self, claude_code_adapter: ClaudeCodeAdapter) -> None:
+    async def test_translate_request_default_intent(
+        self,
+        claude_code_adapter: ClaudeCodeAdapter,
+    ) -> None:
         raw = {"prompt": "Something unknown", "intent": "unknown_thing"}
         req = await claude_code_adapter.translate_request(raw)
         assert req.intent == RequestIntent.CHAT  # falls back to chat
 
     @pytest.mark.asyncio
-    async def test_translate_request_with_options(self, claude_code_adapter: ClaudeCodeAdapter) -> None:
+    async def test_translate_request_with_options(
+        self,
+        claude_code_adapter: ClaudeCodeAdapter,
+    ) -> None:
         raw = {"prompt": "Hello", "options": {"model": "opus"}}
         req = await claude_code_adapter.translate_request(raw)
         assert req.options == {"model": "opus"}
 
     @pytest.mark.asyncio
-    async def test_translate_request_with_context_files(self, claude_code_adapter: ClaudeCodeAdapter, tmp_path) -> None:
+    async def test_translate_request_with_context_files(
+        self,
+        claude_code_adapter: ClaudeCodeAdapter,
+        tmp_path,
+    ) -> None:
         test_file = tmp_path / "example.py"
         test_file.write_text("print('hi')", encoding="utf-8")
         raw = {"prompt": "Explain this", "intent": "explain", "context_files": [str(test_file)]}
@@ -77,12 +86,19 @@ class TestClaudeCodeAdapter:
         assert req.context.files[0].language == "py"
 
     @pytest.mark.asyncio
-    async def test_translate_request_type_error(self, claude_code_adapter: ClaudeCodeAdapter) -> None:
+    async def test_translate_request_type_error(
+        self,
+        claude_code_adapter: ClaudeCodeAdapter,
+    ) -> None:
         with pytest.raises(TypeError):
             await claude_code_adapter.translate_request("not a dict")
 
     @pytest.mark.asyncio
-    async def test_translate_response(self, claude_code_adapter: ClaudeCodeAdapter, sample_engine_response: EngineResponse) -> None:
+    async def test_translate_response(
+        self,
+        claude_code_adapter: ClaudeCodeAdapter,
+        sample_engine_response: EngineResponse,
+    ) -> None:
         result = await claude_code_adapter.translate_response(sample_engine_response)
         assert "Here is your code:" in result
 
@@ -95,6 +111,7 @@ class TestClaudeCodeAdapter:
 # ---------------------------------------------------------------------------
 # Formatter tests
 # ---------------------------------------------------------------------------
+
 
 class TestFormatter:
     def test_text_mode_content(self, sample_engine_response: EngineResponse) -> None:
@@ -138,6 +155,7 @@ class TestFormatter:
 # ---------------------------------------------------------------------------
 # CLI tests
 # ---------------------------------------------------------------------------
+
 
 class TestCLI:
     def test_group_has_commands(self) -> None:

@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 import pytest
-import structlog
 
 from auracode.engine.core import AuraCodeEngine
 from auracode.engine.preferences import PreferencesManager
-from auracode.engine.registry import AdapterRegistry, BackendRegistry
 from auracode.models.config import AuraCodeConfig
 from auracode.models.context import SessionContext
-from auracode.models.request import EngineRequest, EngineResponse, RequestIntent, TokenUsage
+from auracode.models.request import EngineRequest, RequestIntent, TokenUsage
 from auracode.routing.base import (
     AnalyzerInfo,
     BaseRouterBackend,
@@ -21,7 +18,6 @@ from auracode.routing.base import (
     RouteResult,
     ServiceInfo,
 )
-
 
 # ---------------------------------------------------------------------------
 # Mock backend with catalog support
@@ -161,7 +157,10 @@ class TestAnalyzerLifecycle:
         active = await catalog_backend.get_active_analyzer()
         assert active is None
 
-    async def test_set_nonexistent_analyzer_fails(self, catalog_backend: CatalogMockBackend) -> None:
+    async def test_set_nonexistent_analyzer_fails(
+        self,
+        catalog_backend: CatalogMockBackend,
+    ) -> None:
         result = await catalog_backend.set_active_analyzer("does-not-exist")
         assert result is False
 

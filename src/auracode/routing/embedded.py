@@ -47,14 +47,10 @@ class EmbeddedRouterBackend(BaseRouterBackend):
         context_prefix = build_context_prompt(context)
         full_prompt = context_prefix + prompt
 
-        result_text: str | None = await asyncio.to_thread(
-            self._fabric.execute, role, full_prompt
-        )
+        result_text: str | None = await asyncio.to_thread(self._fabric.execute, role, full_prompt)
 
         if result_text is None:
-            raise RuntimeError(
-                f"All models failed for role '{role}' — no response from fabric."
-            )
+            raise RuntimeError(f"All models failed for role '{role}' — no response from fabric.")
 
         # Try to identify which model was used from the config chain.
         chain = self._config_loader.get_role_chain(role)
@@ -101,15 +97,17 @@ class EmbeddedRouterBackend(BaseRouterBackend):
             for sid in entries:
                 data = self._config_loader.catalog_get(sid)
                 if data:
-                    result.append(ServiceInfo(
-                        service_id=sid,
-                        display_name=data.get("display_name", sid),
-                        description=data.get("description", ""),
-                        provider=data.get("provider", ""),
-                        endpoint=data.get("endpoint", ""),
-                        tools=data.get("tools", []),
-                        status=data.get("status", "registered"),
-                    ))
+                    result.append(
+                        ServiceInfo(
+                            service_id=sid,
+                            display_name=data.get("display_name", sid),
+                            description=data.get("description", ""),
+                            provider=data.get("provider", ""),
+                            endpoint=data.get("endpoint", ""),
+                            tools=data.get("tools", []),
+                            status=data.get("status", "registered"),
+                        )
+                    )
             return result
         except Exception:
             return []
@@ -123,15 +121,17 @@ class EmbeddedRouterBackend(BaseRouterBackend):
             for aid in entries:
                 data = self._config_loader.catalog_get(aid)
                 if data:
-                    result.append(AnalyzerInfo(
-                        analyzer_id=aid,
-                        display_name=data.get("display_name", aid),
-                        description=data.get("description", ""),
-                        kind=data.get("analyzer_kind", ""),
-                        provider=data.get("provider", ""),
-                        capabilities=data.get("capabilities", []),
-                        is_active=(aid == active_id),
-                    ))
+                    result.append(
+                        AnalyzerInfo(
+                            analyzer_id=aid,
+                            display_name=data.get("display_name", aid),
+                            description=data.get("description", ""),
+                            kind=data.get("analyzer_kind", ""),
+                            provider=data.get("provider", ""),
+                            capabilities=data.get("capabilities", []),
+                            is_active=(aid == active_id),
+                        )
+                    )
             return result
         except Exception:
             return []

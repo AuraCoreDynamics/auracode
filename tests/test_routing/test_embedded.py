@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any
 
 import pytest
 
@@ -11,14 +10,15 @@ from auracode.models.context import FileContext, SessionContext
 from auracode.models.request import RequestIntent
 from auracode.routing.base import ModelInfo, RouteResult
 
-
 # ---------------------------------------------------------------------------
 # Helpers — import the backend *after* the patch fixture activates.
 # ---------------------------------------------------------------------------
 
+
 def _import_backend():
     """(Re-)import EmbeddedRouterBackend so it picks up mocked modules."""
     import auracode.routing.embedded as mod
+
     importlib.reload(mod)
     return mod.EmbeddedRouterBackend
 
@@ -33,7 +33,7 @@ class TestEmbeddedInit:
     def test_init_creates_config_and_fabric(self, _patch_aurarouter):
         mocks = _patch_aurarouter
         cls = _import_backend()
-        backend = cls(config_path="/fake/path.yaml")
+        cls(config_path="/fake/path.yaml")
 
         mocks["config_cls"].assert_called_once_with(config_path="/fake/path.yaml")
         mocks["fabric_cls"].assert_called_once_with(config=mocks["config_loader"])

@@ -30,9 +30,7 @@ def create_app(engine) -> web.Application:
     return app
 
 
-async def start_server(
-    engine, host: str = "127.0.0.1", port: int = 8741
-) -> None:
+async def start_server(engine, host: str = "127.0.0.1", port: int = 8741) -> None:
     """Start the shim server (blocking)."""
     app = create_app(engine)
     runner = web.AppRunner(app)
@@ -48,9 +46,7 @@ async def start_server(
         await runner.cleanup()
 
 
-def start_server_daemon(
-    engine, host: str = "127.0.0.1", port: int = 8741
-) -> threading.Thread:
+def start_server_daemon(engine, host: str = "127.0.0.1", port: int = 8741) -> threading.Thread:
     """Start the shim server in a daemon thread. Returns the thread."""
 
     def _run() -> None:

@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 
-from auracode.models.preferences import UserPreferences, _PREFS_DIR, _PREFS_FILE
+from auracode.models.preferences import _PREFS_FILE, UserPreferences
 
 
 class PreferencesManager:

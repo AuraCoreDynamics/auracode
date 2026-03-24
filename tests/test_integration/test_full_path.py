@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from auracode.engine.core import AuraCodeEngine
-from auracode.engine.registry import AdapterRegistry, BackendRegistry
 from auracode.models.request import EngineRequest, EngineResponse, RequestIntent
 
 from .conftest import IntegrationMockBackend
@@ -72,7 +71,7 @@ class TestFullPath:
             prompt="First message",
             adapter_name="test",
         )
-        resp = await engine.execute(req)
+        await engine.execute(req)
 
         # Engine should have created a session and updated history
         # We can verify by checking the session manager
@@ -156,6 +155,7 @@ class TestMcpServerIntegration:
         sys.modules["mcp.server"] = None  # type: ignore[assignment]
         try:
             from auracode.mcp_server import create_mcp_server
+
             result = create_mcp_server(engine=MagicMock())
             assert result is None
         finally:
@@ -184,6 +184,7 @@ class TestMcpServerIntegration:
                 def decorator(fn):
                     registered_tools.append(fn.__name__)
                     return fn
+
                 return decorator
 
         fake_mcp = types.ModuleType("mcp")
@@ -196,6 +197,7 @@ class TestMcpServerIntegration:
         sys.modules["mcp.server"] = fake_mcp_server
         try:
             from auracode.mcp_server import create_mcp_server
+
             engine = MagicMock()
             result = create_mcp_server(engine)
             assert result is not None
@@ -215,5 +217,3 @@ class TestMcpServerIntegration:
                 sys.modules["mcp.server"] = saved_srv
             else:
                 sys.modules.pop("mcp.server", None)
-
-

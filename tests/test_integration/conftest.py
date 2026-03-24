@@ -12,7 +12,7 @@ from auracode.engine.core import AuraCodeEngine
 from auracode.engine.registry import AdapterRegistry, BackendRegistry
 from auracode.models.config import AuraCodeConfig
 from auracode.models.context import SessionContext
-from auracode.models.request import EngineRequest, RequestIntent, TokenUsage
+from auracode.models.request import RequestIntent, TokenUsage
 from auracode.routing.base import BaseRouterBackend, ModelInfo, RouteResult
 
 
@@ -46,7 +46,11 @@ class IntegrationMockBackend(BaseRouterBackend):
     async def list_models(self) -> list[ModelInfo]:
         return [
             ModelInfo(model_id="integration-mock-v1", provider="mock", tags=["integration"]),
-            ModelInfo(model_id="integration-mock-v2", provider="mock", tags=["integration", "large"]),
+            ModelInfo(
+                model_id="integration-mock-v2",
+                provider="mock",
+                tags=["integration", "large"],
+            ),
         ]
 
     async def health_check(self) -> bool:

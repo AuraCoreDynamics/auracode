@@ -28,20 +28,23 @@ class TestConsoleInit:
 class TestIntentDetection:
     """Intent is detected from the first word of the prompt."""
 
-    @pytest.mark.parametrize("text, expected", [
-        ("explain main.py", RequestIntent.EXPLAIN_CODE),
-        ("review server.py", RequestIntent.REVIEW),
-        ("plan a REST API", RequestIntent.PLAN),
-        ("edit the config loader", RequestIntent.EDIT_CODE),
-        ("generate a parser", RequestIntent.GENERATE_CODE),
-        ("write unit tests", RequestIntent.GENERATE_CODE),
-        ("create a new module", RequestIntent.GENERATE_CODE),
-        ("implement the handler", RequestIntent.GENERATE_CODE),
-        ("complete this function", RequestIntent.COMPLETE_CODE),
-        ("how does this work?", RequestIntent.CHAT),
-        ("what is dependency injection?", RequestIntent.CHAT),
-        ("", RequestIntent.CHAT),
-    ])
+    @pytest.mark.parametrize(
+        "text, expected",
+        [
+            ("explain main.py", RequestIntent.EXPLAIN_CODE),
+            ("review server.py", RequestIntent.REVIEW),
+            ("plan a REST API", RequestIntent.PLAN),
+            ("edit the config loader", RequestIntent.EDIT_CODE),
+            ("generate a parser", RequestIntent.GENERATE_CODE),
+            ("write unit tests", RequestIntent.GENERATE_CODE),
+            ("create a new module", RequestIntent.GENERATE_CODE),
+            ("implement the handler", RequestIntent.GENERATE_CODE),
+            ("complete this function", RequestIntent.COMPLETE_CODE),
+            ("how does this work?", RequestIntent.CHAT),
+            ("what is dependency injection?", RequestIntent.CHAT),
+            ("", RequestIntent.CHAT),
+        ],
+    )
     def test_intent_from_prefix(self, console: AuraCodeConsole, text, expected):
         assert console._detect_intent(text) == expected
 
@@ -99,6 +102,7 @@ class TestSessionContext:
 
     def test_files_included_in_context(self, console: AuraCodeConsole):
         from auracode.models.context import FileContext
+
         console.context_files.append(
             FileContext(path="test.py", content="print('hi')", language="py")
         )

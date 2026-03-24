@@ -67,9 +67,7 @@ class McpCatalogClient:
             client_tools = client.get_tools()
             for t in client_tools:
                 if t.get("name") == tool_name:
-                    result = await asyncio.to_thread(
-                        client.call_tool, tool_name, arguments
-                    )
+                    result = await asyncio.to_thread(client.call_tool, tool_name, arguments)
                     return result
 
         raise ValueError(f"Tool '{tool_name}' not found in any MCP client")
