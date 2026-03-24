@@ -1,5 +1,7 @@
 # AuraCode
 
+![Version](https://img.shields.io/badge/version-0.1.0-blue) ![Python](https://img.shields.io/badge/python-3.12%2B-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
 **Terminal-native, vendor-agnostic AI coding assistant powered by Federated Mixture-of-Experts.**
 
 AuraCode is a different kind of coding tool. Where other assistants lock you into a single model from a single vendor, AuraCode routes every request to the right model for the job — automatically, transparently, and under your control. A quick variable rename goes to a fast local model that responds in milliseconds. A complex architectural refactor goes to a frontier reasoning model. You don't choose; the system knows.
@@ -83,10 +85,13 @@ auracode status
 # List available models (depends on your AuraRouter configuration)
 auracode models
 
+# Launch the interactive REPL (default command)
+auracode
+
 # One-shot code generation via the Claude Code adapter
 auracode claude do "Write a Python function that validates email addresses"
 
-# Interactive conversation
+# Interactive conversation via Claude Code adapter
 auracode claude chat
 
 # Explain a file
@@ -151,7 +156,7 @@ AuraCode loads configuration from the first file found in this order:
 router_config_path: null
 
 # Default CLI adapter when none is specified.
-default_adapter: claude-code
+default_adapter: opencode
 
 # Logging verbosity: DEBUG, INFO, WARNING, ERROR.
 log_level: INFO
@@ -171,6 +176,29 @@ local_context_limit: 100000
 
 # Per-adapter configuration. Keys are adapter names (e.g., "claude-code").
 adapters: {}
+```
+
+### User Preferences
+
+AuraCode stores persistent user preferences in `~/.auracode/preferences.yaml`. Preferences survive across sessions and override config defaults where applicable.
+
+```yaml
+# ~/.auracode/preferences.yaml
+default_adapter: opencode        # Adapter to use on startup
+show_model_in_response: true     # Display which model handled each response
+show_token_usage: false          # Show token counts in responses
+history_limit: 100               # Max messages retained in session history
+markdown_rendering: true         # Render markdown in REPL output
+prefer_local: false              # Prefer local models over cloud
+active_analyzer: null            # Active route analyzer (e.g., "auraxlm-moe")
+```
+
+Use the `/prefs` slash command in the REPL to view, set, or reset preferences interactively:
+
+```
+/prefs                    # Show all current preferences
+/prefs set <key> <value>  # Set a preference
+/prefs reset              # Reset all preferences to defaults
 ```
 
 ### Example Configurations
@@ -216,6 +244,7 @@ Requests that exceed local capacity are delegated to your team's AuraGrid fabric
                                     |
                         +-----------v-----------+
                         |       Adapters        |
+                        | OpenCode (default)   |
                         |  Claude Code | Copilot|
                         |  Aider | Codestral   |
                         |  OpenAI API Shim     |
@@ -286,6 +315,7 @@ This mapping is configurable through AuraRouter's role chains. The defaults refl
 
 | Adapter | Status | Description |
 |---------|--------|-------------|
+| `opencode` | **Default** | AuraCode-native adapter with clean markdown formatting. Powers the interactive REPL. |
 | `claude-code` | Implemented | Conversational REPL, one-shot generation, explain, review |
 | `openai-shim` | Implemented | OpenAI-compatible HTTP API for IDE extensions |
 | `copilot` | Skeleton | GitHub Copilot CLI ghost-text and inline explanation |
@@ -309,6 +339,57 @@ from auracode.adapters.my_tool.adapter import MyToolAdapter
 def register(registry):
     registry.register(MyToolAdapter())
 ```
+
+---
+
+## Interactive REPL
+
+Running `auracode` with no subcommand launches the interactive REPL. The prompt displays the active adapter and analyzer:
+
+```
+opencode> help me plan a REST API
+opencode:auraxlm-moe> explain src/auracode/engine/core.py
+```
+
+### Slash Commands
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `/help` | `/h`, `/?` | Show available commands and usage hints |
+| `/status` | | Show engine health, active adapter/analyzer, catalog counts |
+| `/catalog` | `/models` | List the full catalog: models, services, and analyzers |
+| `/analyzer` | | View or switch the active route analyzer |
+| `/adapter` | | Switch or list adapters |
+| `/claude` | | Switch to Claude Code adapter |
+| `/copilot` | | Switch to Copilot adapter |
+| `/aider` | | Switch to Aider adapter |
+| `/codestral` | | Switch to Codestral adapter |
+| `/context` | `/ctx` | Add or list context files |
+| `/clear` | | Clear session history and/or context |
+| `/prefs` | `/preferences` | View or set persistent preferences |
+| `/explain` | | Explain a file (shortcut for `explain <file>` prompt) |
+| `/review` | | Review a file (shortcut for `review <file>` prompt) |
+| `/quit` | `/q`, `/exit` | Exit AuraCode |
+
+### Catalog and Analyzers
+
+The `/catalog` command (aliased as `/models`) displays the full roster of models, MCP services, and route analyzers available through the active routing backend. You can filter by kind:
+
+```
+/catalog            # Show everything
+/catalog models     # Models only
+/catalog services   # Services only
+/catalog analyzers  # Analyzers only
+```
+
+Route analyzers control how requests are classified and routed. Switch analyzers with `/analyzer`:
+
+```
+/analyzer                  # Show current and available analyzers
+/analyzer auraxlm-moe      # Switch to a specific analyzer
+```
+
+The active analyzer is persisted in user preferences and restored on next launch.
 
 ---
 
@@ -353,23 +434,30 @@ The combination is powerful: AuraXLM's domain specialists handle the routine cod
 ```
 src/auracode/
   __init__.py              # Package root, version, public API
-  app.py                   # Application bootstrap and wiring
-  cli.py                   # Unified Click CLI entry point
+  app.py                   # Application bootstrap and wiring (returns 4-tuple)
+  cli.py                   # Unified Click CLI entry point (repl is default command)
   mcp_server.py            # Reverse-MCP server (exposes tools to MCP clients)
   models/
     request.py             # EngineRequest, EngineResponse, RequestIntent, TokenUsage
     context.py             # SessionContext, FileContext
     config.py              # AuraCodeConfig
+    preferences.py         # UserPreferences (persistent prefs model)
   adapters/
     base.py                # BaseAdapter ABC
     loader.py              # Auto-discovery of adapter subpackages
+    opencode/              # OpenCode adapter — AuraCode-native (default)
+      adapter.py           # OpenCodeAdapter
+      formatter.py         # Clean markdown response formatting
     claude_code/           # Claude Code CLI adapter (implemented)
     openai_shim/           # OpenAI-compatible API adapter (implemented)
     copilot/               # GitHub Copilot adapter (skeleton)
     aider/                 # Aider adapter (skeleton)
     codestral/             # Codestral adapter (skeleton)
+  repl/
+    console.py             # AuraCodeConsole — interactive REPL loop
+    commands.py            # Slash-command registry and built-in handlers
   routing/
-    base.py                # BaseRouterBackend ABC, ModelInfo, RouteResult
+    base.py                # BaseRouterBackend ABC, ModelInfo, ServiceInfo, AnalyzerInfo, RouteResult
     embedded.py            # EmbeddedRouterBackend (wraps AuraRouter)
     intent_map.py          # Intent-to-role mapping and context building
     mcp_catalog.py         # MCP tool catalog client
@@ -377,6 +465,7 @@ src/auracode/
     core.py                # AuraCodeEngine — central orchestrator
     session.py             # SessionManager — in-memory conversation state
     registry.py            # AdapterRegistry, BackendRegistry
+    preferences.py         # PreferencesManager (load/save YAML prefs)
   shim/
     server.py              # aiohttp application factory and server launchers
     openai_compat.py       # /v1/chat/completions and /v1/completions handlers
@@ -395,7 +484,9 @@ tests/
   conftest.py              # Shared fixtures, mock backends
   test_models.py           # Domain model tests
   test_engine.py           # Engine, session, registry tests
-  test_adapters/           # Adapter discovery and Claude Code tests
+  test_preferences.py      # UserPreferences and PreferencesManager tests
+  test_adapters/           # Adapter discovery, Claude Code, and OpenCode tests
+  test_repl/               # REPL console and slash-command tests
   test_routing/            # Embedded router, intent mapping, MCP catalog tests
   test_shim/               # API shim server tests
   test_grid/               # Grid client and failover tests

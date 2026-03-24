@@ -11,7 +11,7 @@ class AuraCodeConfig(BaseModel):
     """Top-level configuration for the AuraCode engine."""
 
     router_config_path: str | None = None
-    default_adapter: str = "claude-code"
+    default_adapter: str = "opencode"
     log_level: str = "INFO"
     grid_endpoint: str | None = None
     grid_failover_to_local: bool = True

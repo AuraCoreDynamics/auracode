@@ -86,12 +86,6 @@ class TestAuraCodeEngine:
         assert resp.error is None
 
     @pytest.mark.asyncio
-    async def test_execute_creates_session(self, engine: AuraCodeEngine, sample_request: EngineRequest) -> None:
-        resp = await engine.execute(sample_request)
-        # Engine should have created at least one session internally
-        assert resp.error is None
-
-    @pytest.mark.asyncio
     async def test_execute_error_path(
         self,
         default_config: AuraCodeConfig,
@@ -109,6 +103,32 @@ class TestAuraCodeEngine:
         assert engine.get_session(sid) is not None
         engine.close_session(sid)
         assert engine.get_session(sid) is None
+
+    @pytest.mark.asyncio
+    async def test_execute_creates_session(self, engine: AuraCodeEngine) -> None:
+        """Verify execute() creates a session visible in session_manager."""
+        # Session manager should be empty before execute
+        assert len(engine.session_manager._sessions) == 0
+
+        req = EngineRequest(
+            request_id="sess-test-001",
+            intent=RequestIntent.CHAT,
+            prompt="Hello engine",
+            adapter_name="test",
+        )
+        resp = await engine.execute(req)
+        assert resp.error is None
+
+        # After execute, session_manager must contain exactly one session
+        assert len(engine.session_manager._sessions) == 1
+        session_id = list(engine.session_manager._sessions.keys())[0]
+        session = engine.session_manager.get(session_id)
+        assert session is not None
+        assert session.working_directory == "."
+        # Session history should have 2 entries: user prompt + assistant response
+        assert len(session.history) == 2
+        assert session.history[0]["content"] == "Hello engine"
+        assert session.history[1]["role"] == "assistant"
 
 
 # ---------------------------------------------------------------------------

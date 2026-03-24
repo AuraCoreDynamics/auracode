@@ -21,6 +21,34 @@ class ModelInfo(BaseModel):
     tags: list[str] = []
 
 
+class ServiceInfo(BaseModel):
+    """Descriptor for an MCP service in the catalog."""
+
+    model_config = ConfigDict(frozen=True)
+
+    service_id: str
+    display_name: str
+    description: str = ""
+    provider: str = ""
+    endpoint: str = ""
+    tools: list[str] = []
+    status: str = "registered"
+
+
+class AnalyzerInfo(BaseModel):
+    """Descriptor for a route analyzer in the catalog."""
+
+    model_config = ConfigDict(frozen=True)
+
+    analyzer_id: str
+    display_name: str
+    description: str = ""
+    kind: str = ""
+    provider: str = ""
+    capabilities: list[str] = []
+    is_active: bool = False
+
+
 class RouteResult(BaseModel):
     """The outcome of a single routing + inference call."""
 
@@ -55,3 +83,28 @@ class BaseRouterBackend(ABC):
     async def health_check(self) -> bool:
         """Return True if the backend is reachable and operational."""
         ...
+
+    # ── Optional catalog methods (default implementations) ────────────
+
+    async def list_services(self) -> list[ServiceInfo]:
+        """Return all services currently available through this backend."""
+        return []
+
+    async def list_analyzers(self) -> list[AnalyzerInfo]:
+        """Return all route analyzers currently available through this backend."""
+        return []
+
+    async def get_active_analyzer(self) -> AnalyzerInfo | None:
+        """Return the currently active route analyzer, or None."""
+        return None
+
+    async def set_active_analyzer(self, analyzer_id: str | None) -> bool:
+        """Set the active route analyzer. Returns True on success."""
+        return False
+
+    async def catalog_summary(self) -> dict[str, int]:
+        """Return a summary of catalog counts."""
+        models = await self.list_models()
+        services = await self.list_services()
+        analyzers = await self.list_analyzers()
+        return {"models": len(models), "services": len(services), "analyzers": len(analyzers)}

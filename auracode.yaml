@@ -5,7 +5,7 @@
 router_config_path: null
 
 # Adapter used when none is specified
-default_adapter: claude-code
+default_adapter: opencode
 
 # Logging level (DEBUG, INFO, WARNING, ERROR)
 log_level: INFO

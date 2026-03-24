@@ -8,6 +8,7 @@ import pytest
 
 from auracode.app import create_application, load_config
 from auracode.engine.core import AuraCodeEngine
+from auracode.engine.preferences import PreferencesManager
 from auracode.engine.registry import AdapterRegistry, BackendRegistry
 from auracode.models.config import AuraCodeConfig
 
@@ -50,31 +51,32 @@ class TestCreateApplication:
 
     def test_bootstrap_with_defaults(self):
         """create_application() succeeds with no config file."""
-        engine, adapters, backends = create_application()
+        engine, adapters, backends, prefs = create_application()
         assert isinstance(engine, AuraCodeEngine)
         assert isinstance(adapters, AdapterRegistry)
         assert isinstance(backends, BackendRegistry)
+        assert isinstance(prefs, PreferencesManager)
 
     def test_engine_has_working_backend(self):
         """Engine has a router backend (stub at minimum)."""
-        engine, _, _ = create_application()
+        engine, _, _, _ = create_application()
         assert engine.router is not None
 
     def test_adapter_registry_contains_claude_code(self):
         """Adapter registry discovers the claude-code adapter."""
-        _, adapters, _ = create_application()
+        _, adapters, _, _ = create_application()
         names = adapters.list_adapters()
         assert "claude-code" in names
 
     def test_adapter_registry_contains_openai_shim(self):
         """Adapter registry discovers the openai-shim adapter."""
-        _, adapters, _ = create_application()
+        _, adapters, _, _ = create_application()
         names = adapters.list_adapters()
         assert "openai-shim" in names
 
     def test_grid_backend_not_created_when_no_endpoint(self):
         """BackendRegistry does not have grid when grid_endpoint is None."""
-        _, _, backends = create_application()
+        _, _, backends, _ = create_application()
         # With no AuraRouter installed, default will be stub (not in registry)
         # With AuraRouter installed, default will be embedded
         # Either way, there should be no "grid" backend
@@ -82,7 +84,7 @@ class TestCreateApplication:
 
     def test_engine_router_is_set(self):
         """Engine always has a router backend assigned."""
-        engine, _, _ = create_application()
+        engine, _, _, _ = create_application()
         assert engine.router is not None
         # The router should implement the BaseRouterBackend interface
         from auracode.routing.base import BaseRouterBackend

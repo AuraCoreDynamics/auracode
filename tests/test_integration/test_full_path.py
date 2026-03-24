@@ -142,23 +142,78 @@ class TestFullPath:
         assert "backend unavailable" in resp.error
 
 
-class TestMcpServer:
-    """Tests for the reverse-MCP server factory."""
+class TestMcpServerIntegration:
+    """Verify create_mcp_server behavior end-to-end."""
 
-    def test_create_mcp_server_without_mcp_installed(self, app_components):
-        """create_mcp_server returns None when mcp package is absent."""
+    def test_mcp_missing_returns_none(self) -> None:
+        """When mcp package is not installed, create_mcp_server returns None."""
         import sys
-        from unittest.mock import patch
+        from unittest.mock import MagicMock
 
-        engine, _, _ = app_components
-
-        # Temporarily make mcp.server unimportable
-        with patch.dict(sys.modules, {"mcp": None, "mcp.server": None}):
+        saved = sys.modules.get("mcp")
+        saved_srv = sys.modules.get("mcp.server")
+        sys.modules["mcp"] = None  # type: ignore[assignment]
+        sys.modules["mcp.server"] = None  # type: ignore[assignment]
+        try:
             from auracode.mcp_server import create_mcp_server
+            result = create_mcp_server(engine=MagicMock())
+            assert result is None
+        finally:
+            if saved is not None:
+                sys.modules["mcp"] = saved
+            else:
+                sys.modules.pop("mcp", None)
+            if saved_srv is not None:
+                sys.modules["mcp.server"] = saved_srv
+            else:
+                sys.modules.pop("mcp.server", None)
 
-            # Force reimport to hit the ImportError path
+    def test_mcp_available_returns_server_with_tools(self) -> None:
+        """When mcp is available, server is returned with 4 tool registrations."""
+        import sys
+        import types
+        from unittest.mock import MagicMock
+
+        registered_tools: list[str] = []
+
+        class FakeFastMCP:
+            def __init__(self, name: str):
+                self._name = name
+
+            def tool(self):
+                def decorator(fn):
+                    registered_tools.append(fn.__name__)
+                    return fn
+                return decorator
+
+        fake_mcp = types.ModuleType("mcp")
+        fake_mcp_server = types.ModuleType("mcp.server")
+        fake_mcp_server.FastMCP = FakeFastMCP  # type: ignore[attr-defined]
+
+        saved = sys.modules.get("mcp")
+        saved_srv = sys.modules.get("mcp.server")
+        sys.modules["mcp"] = fake_mcp
+        sys.modules["mcp.server"] = fake_mcp_server
+        try:
+            from auracode.mcp_server import create_mcp_server
+            engine = MagicMock()
             result = create_mcp_server(engine)
-            # Result is None when mcp is not available
-            # (may be non-None if mcp IS installed)
-            # Just verify no crash
-            assert result is None or result is not None
+            assert result is not None
+            assert result._name == "auracode"
+            # Verify all 4 tools were registered
+            assert "auracode_generate" in registered_tools
+            assert "auracode_explain" in registered_tools
+            assert "auracode_review" in registered_tools
+            assert "auracode_models" in registered_tools
+            assert len(registered_tools) == 4
+        finally:
+            if saved is not None:
+                sys.modules["mcp"] = saved
+            else:
+                sys.modules.pop("mcp", None)
+            if saved_srv is not None:
+                sys.modules["mcp.server"] = saved_srv
+            else:
+                sys.modules.pop("mcp.server", None)
+
+

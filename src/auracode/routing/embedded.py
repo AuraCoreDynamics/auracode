@@ -7,7 +7,13 @@ from typing import Any
 
 from auracode.models.context import SessionContext
 from auracode.models.request import RequestIntent
-from auracode.routing.base import BaseRouterBackend, ModelInfo, RouteResult
+from auracode.routing.base import (
+    AnalyzerInfo,
+    BaseRouterBackend,
+    ModelInfo,
+    RouteResult,
+    ServiceInfo,
+)
 from auracode.routing.intent_map import build_context_prompt, map_intent_to_role
 
 
@@ -80,5 +86,81 @@ class EmbeddedRouterBackend(BaseRouterBackend):
                 and self._fabric is not None
                 and bool(self._config_loader.config)
             )
+        except Exception:
+            return False
+
+    # ------------------------------------------------------------------ #
+    # Catalog methods
+    # ------------------------------------------------------------------ #
+
+    async def list_services(self) -> list[ServiceInfo]:
+        """Query AuraRouter catalog for services."""
+        try:
+            entries = self._config_loader.catalog_list(kind="service")
+            result: list[ServiceInfo] = []
+            for sid in entries:
+                data = self._config_loader.catalog_get(sid)
+                if data:
+                    result.append(ServiceInfo(
+                        service_id=sid,
+                        display_name=data.get("display_name", sid),
+                        description=data.get("description", ""),
+                        provider=data.get("provider", ""),
+                        endpoint=data.get("endpoint", ""),
+                        tools=data.get("tools", []),
+                        status=data.get("status", "registered"),
+                    ))
+            return result
+        except Exception:
+            return []
+
+    async def list_analyzers(self) -> list[AnalyzerInfo]:
+        """Query AuraRouter catalog for analyzers."""
+        try:
+            active_id = self._config_loader.get_active_analyzer()
+            entries = self._config_loader.catalog_list(kind="analyzer")
+            result: list[AnalyzerInfo] = []
+            for aid in entries:
+                data = self._config_loader.catalog_get(aid)
+                if data:
+                    result.append(AnalyzerInfo(
+                        analyzer_id=aid,
+                        display_name=data.get("display_name", aid),
+                        description=data.get("description", ""),
+                        kind=data.get("analyzer_kind", ""),
+                        provider=data.get("provider", ""),
+                        capabilities=data.get("capabilities", []),
+                        is_active=(aid == active_id),
+                    ))
+            return result
+        except Exception:
+            return []
+
+    async def get_active_analyzer(self) -> AnalyzerInfo | None:
+        """Get the active analyzer."""
+        try:
+            active_id = self._config_loader.get_active_analyzer()
+            if not active_id:
+                return None
+            data = self._config_loader.catalog_get(active_id)
+            if not data:
+                return None
+            return AnalyzerInfo(
+                analyzer_id=active_id,
+                display_name=data.get("display_name", active_id),
+                description=data.get("description", ""),
+                kind=data.get("analyzer_kind", ""),
+                provider=data.get("provider", ""),
+                capabilities=data.get("capabilities", []),
+                is_active=True,
+            )
+        except Exception:
+            return None
+
+    async def set_active_analyzer(self, analyzer_id: str | None) -> bool:
+        """Set the active analyzer in AuraRouter config."""
+        try:
+            self._config_loader.set_active_analyzer(analyzer_id)
+            return True
         except Exception:
             return False

@@ -9,6 +9,7 @@ import structlog
 import yaml
 
 from auracode.engine.core import AuraCodeEngine
+from auracode.engine.preferences import PreferencesManager
 from auracode.engine.registry import AdapterRegistry, BackendRegistry
 from auracode.adapters.loader import discover_adapters
 from auracode.models.config import AuraCodeConfig
@@ -72,13 +73,19 @@ def load_config(config_path: str | None = None) -> AuraCodeConfig:
 
 def create_application(
     config_path: str | None = None,
-) -> tuple[AuraCodeEngine, AdapterRegistry, BackendRegistry]:
+) -> tuple[AuraCodeEngine, AdapterRegistry, BackendRegistry, PreferencesManager]:
     """Bootstrap the full AuraCode application.
 
-    Returns a tuple of ``(engine, adapter_registry, backend_registry)``.
+    Returns a tuple of ``(engine, adapter_registry, backend_registry, preferences_manager)``.
     """
     config = load_config(config_path)
     _safe_configure_logging(config.log_level)
+
+    # Load user preferences and let them override config defaults
+    preferences_manager = PreferencesManager()
+    prefs = preferences_manager.preferences
+    if prefs.default_adapter != config.default_adapter:
+        config.default_adapter = prefs.default_adapter
 
     # Wire routing backends
     backend_registry = BackendRegistry()
@@ -115,6 +122,29 @@ def create_application(
     if default_backend:
         backend_registry.register("default", default_backend)
 
+    # Apply user's analyzer preference (non-critical — never blocks startup)
+    if prefs.active_analyzer and default_backend:
+        try:
+            import asyncio as _aio
+
+            try:
+                loop = _aio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                # Already inside an event loop — schedule as a task.
+                # The preference will be applied once the loop processes it.
+                loop.create_task(
+                    default_backend.set_active_analyzer(prefs.active_analyzer)
+                )
+            else:
+                _aio.run(
+                    default_backend.set_active_analyzer(prefs.active_analyzer)
+                )
+        except Exception:
+            pass  # Non-critical — analyzer preference is best-effort
+
     # Wire adapters
     adapter_registry = AdapterRegistry()
     discover_adapters(adapter_registry)
@@ -123,7 +153,7 @@ def create_application(
     router = backend_registry.get_default() if default_backend else _create_stub_backend()
     engine = AuraCodeEngine(config, router)
 
-    return engine, adapter_registry, backend_registry
+    return engine, adapter_registry, backend_registry, preferences_manager
 
 
 def _create_stub_backend():

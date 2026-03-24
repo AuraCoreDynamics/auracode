@@ -7,7 +7,13 @@ from typing import Any
 
 from auracode.models.context import SessionContext
 from auracode.models.request import RequestIntent
-from auracode.routing.base import BaseRouterBackend, ModelInfo, RouteResult
+from auracode.routing.base import (
+    AnalyzerInfo,
+    BaseRouterBackend,
+    ModelInfo,
+    RouteResult,
+    ServiceInfo,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -120,4 +126,69 @@ class FailoverBackend(BaseRouterBackend):
                     return True
             except Exception:
                 continue
+        return False
+
+    # ------------------------------------------------------------------
+    # Catalog methods — merge / delegate pattern
+    # ------------------------------------------------------------------
+
+    async def list_services(self) -> list[ServiceInfo]:
+        """Merge services from both backends, deduplicate by service_id."""
+        seen: dict[str, ServiceInfo] = {}
+        for backend in (self._primary, self._fallback):
+            try:
+                services = await backend.list_services()
+                for s in services:
+                    if s.service_id not in seen:
+                        seen[s.service_id] = s
+            except Exception:
+                logger.debug(
+                    "list_services failed for %s", type(backend).__name__,
+                    exc_info=True,
+                )
+        return list(seen.values())
+
+    async def list_analyzers(self) -> list[AnalyzerInfo]:
+        """Merge analyzers from both backends, deduplicate by analyzer_id."""
+        seen: dict[str, AnalyzerInfo] = {}
+        for backend in (self._primary, self._fallback):
+            try:
+                analyzers = await backend.list_analyzers()
+                for a in analyzers:
+                    if a.analyzer_id not in seen:
+                        seen[a.analyzer_id] = a
+            except Exception:
+                logger.debug(
+                    "list_analyzers failed for %s", type(backend).__name__,
+                    exc_info=True,
+                )
+        return list(seen.values())
+
+    async def get_active_analyzer(self) -> AnalyzerInfo | None:
+        """Delegate to primary, fall back to secondary."""
+        for backend in (self._primary, self._fallback):
+            try:
+                result = await backend.get_active_analyzer()
+                if result is not None:
+                    return result
+            except Exception:
+                logger.debug(
+                    "get_active_analyzer failed for %s",
+                    type(backend).__name__,
+                    exc_info=True,
+                )
+        return None
+
+    async def set_active_analyzer(self, analyzer_id: str | None) -> bool:
+        """Delegate to primary, fall back to secondary."""
+        for backend in (self._primary, self._fallback):
+            try:
+                if await backend.set_active_analyzer(analyzer_id):
+                    return True
+            except Exception:
+                logger.debug(
+                    "set_active_analyzer failed for %s",
+                    type(backend).__name__,
+                    exc_info=True,
+                )
         return False

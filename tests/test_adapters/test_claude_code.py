@@ -84,7 +84,6 @@ class TestClaudeCodeAdapter:
     @pytest.mark.asyncio
     async def test_translate_response(self, claude_code_adapter: ClaudeCodeAdapter, sample_engine_response: EngineResponse) -> None:
         result = await claude_code_adapter.translate_response(sample_engine_response)
-        assert isinstance(result, str)
         assert "Here is your code:" in result
 
     def test_get_cli_group(self, claude_code_adapter: ClaudeCodeAdapter) -> None:

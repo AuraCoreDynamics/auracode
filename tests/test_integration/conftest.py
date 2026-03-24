@@ -91,9 +91,11 @@ def app_components(
     # Register adapters directly to avoid structlog/stderr issues in tests
     from auracode.adapters.claude_code.adapter import ClaudeCodeAdapter
     from auracode.adapters.openai_shim.adapter import OpenAIShimAdapter
+    from auracode.adapters.opencode.adapter import OpenCodeAdapter
 
     adapter_registry.register(ClaudeCodeAdapter())
     adapter_registry.register(OpenAIShimAdapter())
+    adapter_registry.register(OpenCodeAdapter())
 
     engine = AuraCodeEngine(integration_config, mock_backend)
     return engine, adapter_registry, backend_registry

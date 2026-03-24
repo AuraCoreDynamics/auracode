@@ -15,6 +15,7 @@ Adapters (CLI, IDE, MCP, API shim)
          |-- SessionManager (in-memory conversation state)
          |-- AdapterRegistry (adapter discovery and lookup)
          |-- BackendRegistry (routing backend management)
+         |-- PreferencesManager (persistent user preferences)
          |
     BaseRouterBackend
          |-- EmbeddedRouterBackend (AuraRouter — local FMoE)
@@ -37,15 +38,19 @@ Adapters (CLI, IDE, MCP, API shim)
 src/auracode/
   __init__.py              # Package root, __version__, public API re-exports
   app.py                   # Application bootstrap (load_config, create_application)
-  cli.py                   # Unified Click CLI (status, models, serve, claude)
+  cli.py                   # Unified Click CLI (repl [default], status, models, serve)
   mcp_server.py            # Reverse-MCP server factory
   models/
     request.py             # EngineRequest, EngineResponse, RequestIntent, TokenUsage, FileArtifact
     context.py             # SessionContext, FileContext
     config.py              # AuraCodeConfig
+    preferences.py         # UserPreferences (persistent prefs model)
   adapters/
     base.py                # BaseAdapter ABC
     loader.py              # discover_adapters() — package scanning
+    opencode/              # OpenCode adapter — AuraCode-native (default)
+      adapter.py           # OpenCodeAdapter
+      formatter.py         # Clean markdown response formatting
     claude_code/           # Claude Code CLI adapter
       adapter.py           # ClaudeCodeAdapter
       cli.py               # Click group: chat, do, explain, review
@@ -55,8 +60,11 @@ src/auracode/
     copilot/               # Skeleton
     aider/                 # Skeleton
     codestral/             # Skeleton
+  repl/
+    console.py             # AuraCodeConsole — interactive REPL loop
+    commands.py            # Slash-command registry and built-in handlers
   routing/
-    base.py                # BaseRouterBackend ABC, ModelInfo, RouteResult
+    base.py                # BaseRouterBackend ABC, ModelInfo, ServiceInfo, AnalyzerInfo, RouteResult
     embedded.py            # EmbeddedRouterBackend (wraps AuraRouter ComputeFabric)
     intent_map.py          # INTENT_ROLE_MAP, map_intent_to_role(), build_context_prompt()
     mcp_catalog.py         # McpCatalogClient, ToolInfo
@@ -64,6 +72,7 @@ src/auracode/
     core.py                # AuraCodeEngine (execute, get_session, close_session)
     session.py             # SessionManager (in-memory dict, UUID generation)
     registry.py            # AdapterRegistry, BackendRegistry
+    preferences.py         # PreferencesManager (load/save YAML prefs)
   shim/
     server.py              # create_app(), start_server(), start_server_daemon()
     openai_compat.py       # chat_completions(), completions() handlers
@@ -99,7 +108,7 @@ Config lookup chain: `--config` flag > `./auracode.yaml` > `~/.auracode.yaml` > 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `router_config_path` | `str \| null` | `null` | Path to AuraRouter's `auraconfig.yaml` |
-| `default_adapter` | `str` | `"claude-code"` | Adapter used when none specified |
+| `default_adapter` | `str` | `"opencode"` | Adapter used when none specified |
 | `log_level` | `str` | `"INFO"` | Logging verbosity |
 | `grid_endpoint` | `str \| null` | `null` | AuraGrid gRPC endpoint |
 | `grid_failover_to_local` | `bool` | `true` | Fall back to local if grid unavailable |
@@ -132,7 +141,7 @@ Roles are defined in AuraRouter's `auraconfig.yaml` as ordered model chains. The
 4. If `grid_endpoint` is set: create `GridDelegateBackend` + `FailoverBackend`
 5. Fall back to `StubBackend` if no real backend is available
 6. Discover and register all adapters
-7. Create and return `(AuraCodeEngine, AdapterRegistry, BackendRegistry)`
+7. Create and return `(AuraCodeEngine, AdapterRegistry, BackendRegistry, PreferencesManager)`
 
 The bootstrap handles every combination of available/missing dependencies gracefully.
 
@@ -140,10 +149,12 @@ The bootstrap handles every combination of available/missing dependencies gracef
 
 | Command | Description |
 |---------|-------------|
+| `auracode` | Launch the interactive REPL (default command) |
+| `auracode repl` | Launch the interactive REPL (explicit) |
 | `auracode status` | Show health: adapters, router status, model count |
 | `auracode models` | List available models with provider and tags |
 | `auracode serve [--port 8741] [--host 127.0.0.1]` | Start OpenAI-compatible API server |
-| `auracode claude chat [-c FILE] [-m MODEL] [--json]` | Interactive REPL |
+| `auracode claude chat [-c FILE] [-m MODEL] [--json]` | Interactive conversation via Claude Code adapter |
 | `auracode claude do PROMPT [-c FILE] [-m MODEL] [--json]` | One-shot generation |
 | `auracode claude explain FILE [-c FILE] [-m MODEL] [--json]` | Explain a file |
 | `auracode claude review FILE [-c FILE] [-m MODEL] [--json]` | Review code |
@@ -173,6 +184,60 @@ The reverse-MCP server (`mcp_server.py`) exposes:
 | `auracode_review` | `(file_path)` | Review code |
 | `auracode_models` | `()` | List available models |
 
+## REPL Slash Commands
+
+The interactive REPL (`auracode` or `auracode repl`) supports the following slash commands:
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `/help` | `/h`, `/?` | Show available commands and usage hints |
+| `/status` | | Show engine health, active adapter/analyzer, catalog counts |
+| `/catalog` | `/models` | List models, services, and analyzers |
+| `/analyzer` | | View or switch the active route analyzer |
+| `/adapter` | | Switch or list adapters |
+| `/claude` | | Switch to Claude Code adapter |
+| `/copilot` | | Switch to Copilot adapter |
+| `/aider` | | Switch to Aider adapter |
+| `/codestral` | | Switch to Codestral adapter |
+| `/context` | `/ctx` | Add or list context files |
+| `/clear` | | Clear session history and/or context |
+| `/prefs` | `/preferences` | View or set persistent preferences |
+| `/explain` | | Explain a file |
+| `/review` | | Review a file |
+| `/quit` | `/q`, `/exit` | Exit AuraCode |
+
+## Catalog Methods on BaseRouterBackend
+
+`BaseRouterBackend` provides optional catalog methods with default implementations (return empty/False). `EmbeddedRouterBackend` overrides these when AuraRouter is available.
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `list_services()` | `list[ServiceInfo]` | MCP services in the catalog |
+| `list_analyzers()` | `list[AnalyzerInfo]` | Route analyzers available |
+| `get_active_analyzer()` | `AnalyzerInfo \| None` | Currently active route analyzer |
+| `set_active_analyzer(analyzer_id)` | `bool` | Set the active analyzer; returns True on success |
+| `catalog_summary()` | `dict[str, int]` | Counts of models, services, analyzers |
+
+Key data models:
+- `ServiceInfo`: `service_id`, `display_name`, `description`, `provider`, `endpoint`, `tools` (list[str]), `status`
+- `AnalyzerInfo`: `analyzer_id`, `display_name`, `description`, `kind`, `provider`, `capabilities` (list[str]), `is_active`
+
+## User Preferences
+
+Persistent preferences stored in `~/.auracode/preferences.yaml`, managed by `PreferencesManager`.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `default_adapter` | `str` | `"opencode"` | Adapter to use on startup |
+| `show_model_in_response` | `bool` | `True` | Display model name in responses |
+| `show_token_usage` | `bool` | `False` | Show token counts |
+| `history_limit` | `int` | `100` | Max messages in session history |
+| `markdown_rendering` | `bool` | `True` | Render markdown in REPL |
+| `prefer_local` | `bool` | `False` | Prefer local models over cloud |
+| `active_analyzer` | `str \| None` | `None` | Active route analyzer ID |
+
+`PreferencesManager` methods: `load()`, `save()`, `get(key)`, `set(key, value)`. Setting a preference auto-saves to disk. Type coercion is handled automatically (e.g., string "true" to bool).
+
 ## Relationship to AuraCore Ecosystem
 
 AuraCode sits atop three AuraCore systems:
@@ -186,13 +251,15 @@ AuraCode works standalone — it does not require AuraGrid or AuraXLM. But each 
 ## Testing
 
 ```bash
-# Full suite (169 tests)
+# Full suite (345 tests)
 pytest tests/ -x -q
 
 # By component
 pytest tests/test_models.py -x -q          # Domain models
 pytest tests/test_engine.py -x -q          # Engine, session, registry
-pytest tests/test_adapters/ -x -q          # Adapter discovery, Claude Code
+pytest tests/test_preferences.py -x -q     # UserPreferences, PreferencesManager
+pytest tests/test_adapters/ -x -q          # Adapter discovery, Claude Code, OpenCode
+pytest tests/test_repl/ -x -q              # REPL console, slash commands
 pytest tests/test_routing/ -x -q           # Embedded router, intent map, MCP catalog
 pytest tests/test_shim/ -x -q              # API shim server
 pytest tests/test_grid/ -x -q              # Grid client, failover
@@ -208,4 +275,4 @@ All routing and grid tests are fully mocked — they pass without AuraRouter or 
 | Core | `pydantic>=2.0`, `click>=8.0`, `structlog`, `PyYAML>=6.0`, `rich>=13.0` |
 | `[api]` | `aiohttp>=3.9` |
 | `[grid]` | `grpcio>=1.60`, `grpcio-tools>=1.60`, `protobuf>=4.25` |
-| `[dev]` | `pytest>=8.0`, `pytest-asyncio`, `pytest-aiohttp`, plus `[all]` |
+| `[dev]` | `pytest>=8.0`, `pytest-asyncio`, `pytest-aiohttp`, `ruff`, plus `[all]` |

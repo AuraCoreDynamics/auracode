@@ -43,6 +43,39 @@ def _build_mock_config_loader(config: dict | None = None) -> MagicMock:
     loader.get_all_roles = MagicMock(
         return_value=list(cfg.get("roles", {}).keys())
     )
+
+    # Catalog methods
+    _catalog = cfg.get("catalog", {})
+    _active_analyzer = cfg.get("system", {}).get("active_analyzer")
+
+    def _catalog_list(kind=None):
+        ids = []
+        for aid, data in _catalog.items():
+            if kind is None or data.get("kind", "model") == kind:
+                ids.append(aid)
+        if kind is None or kind == "model":
+            for mid in cfg.get("models", {}).keys():
+                if mid not in ids:
+                    ids.append(mid)
+        return ids
+
+    def _catalog_get(artifact_id):
+        entry = _catalog.get(artifact_id)
+        if entry is not None:
+            return dict(entry)
+        model_cfg = cfg.get("models", {}).get(artifact_id)
+        if model_cfg is not None:
+            result = dict(model_cfg)
+            result.setdefault("kind", "model")
+            result.setdefault("display_name", artifact_id)
+            return result
+        return None
+
+    loader.catalog_list = MagicMock(side_effect=_catalog_list)
+    loader.catalog_get = MagicMock(side_effect=_catalog_get)
+    loader.get_active_analyzer = MagicMock(return_value=_active_analyzer)
+    loader.set_active_analyzer = MagicMock()
+
     return loader
 
 

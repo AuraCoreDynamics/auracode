@@ -26,14 +26,21 @@ class TestTokenUsage:
         assert usage.prompt_tokens == 0
         assert usage.completion_tokens == 0
 
-    def test_custom(self) -> None:
-        usage = TokenUsage(prompt_tokens=100, completion_tokens=200)
-        assert usage.prompt_tokens == 100
-
     def test_frozen(self) -> None:
         usage = TokenUsage()
         with pytest.raises(ValidationError):
             usage.prompt_tokens = 42  # type: ignore[misc]
+
+    def test_custom_values_and_frozen(self) -> None:
+        """Create with custom values, verify both fields, and confirm immutability."""
+        usage = TokenUsage(prompt_tokens=150, completion_tokens=300)
+        assert usage.prompt_tokens == 150
+        assert usage.completion_tokens == 300
+        # Verify frozen: both fields must reject assignment
+        with pytest.raises(ValidationError):
+            usage.prompt_tokens = 999  # type: ignore[misc]
+        with pytest.raises(ValidationError):
+            usage.completion_tokens = 999  # type: ignore[misc]
 
 
 class TestFileArtifact:
@@ -72,20 +79,40 @@ class TestEngineResponse:
         resp = EngineResponse(request_id="r1", content="", error="boom")
         assert resp.error == "boom"
 
-    def test_with_artifacts(self) -> None:
-        fa = FileArtifact(path="f.py", content="x=1", action="create")
-        resp = EngineResponse(request_id="r1", content="done", artifacts=[fa])
+    def test_with_artifacts_full_inspection(self) -> None:
+        """Create EngineResponse with artifacts; verify path, content, AND action."""
+        artifact = FileArtifact(
+            path="src/utils.py",
+            content="def add(a, b):\n    return a + b\n",
+            action="create",
+        )
+        resp = EngineResponse(
+            request_id="r-art",
+            content="Created utility module",
+            artifacts=[artifact],
+        )
         assert len(resp.artifacts) == 1
+        art = resp.artifacts[0]
+        assert art.path == "src/utils.py"
+        assert "def add(a, b):" in art.content
+        assert art.action == "create"
+        # Verify the response content is also correct
+        assert resp.content == "Created utility module"
+        assert resp.request_id == "r-art"
 
 
 class TestFileContext:
-    def test_minimal(self) -> None:
-        fc = FileContext(path="foo.py")
-        assert fc.content is None
-
     def test_with_selection(self) -> None:
         fc = FileContext(path="bar.py", selection=(10, 20))
         assert fc.selection == (10, 20)
+
+    def test_minimal_all_fields(self) -> None:
+        """Create FileContext with minimal args and check ALL fields."""
+        fc = FileContext(path="foo.py")
+        assert fc.path == "foo.py"
+        assert fc.content is None
+        assert fc.language is None
+        assert fc.selection is None
 
 
 class TestSessionContext:
@@ -102,7 +129,7 @@ class TestSessionContext:
 class TestAuraCodeConfig:
     def test_defaults(self) -> None:
         cfg = AuraCodeConfig()
-        assert cfg.default_adapter == "claude-code"
+        assert cfg.default_adapter == "opencode"
         assert cfg.local_context_limit == 100_000
 
     def test_override(self) -> None:

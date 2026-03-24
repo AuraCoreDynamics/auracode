@@ -13,6 +13,10 @@ class TestDiscoverAdapters:
         discover_adapters(adapter_registry)
         assert "claude-code" in adapter_registry.list_adapters()
 
+    def test_discovers_opencode(self, adapter_registry: AdapterRegistry) -> None:
+        discover_adapters(adapter_registry)
+        assert "opencode" in adapter_registry.list_adapters()
+
     def test_skeletons_do_not_register(self, adapter_registry: AdapterRegistry) -> None:
         discover_adapters(adapter_registry)
         adapters = adapter_registry.list_adapters()
@@ -20,13 +24,14 @@ class TestDiscoverAdapters:
         assert "aider" not in adapters
         assert "codestral" not in adapters
 
-    def test_discovery_does_not_crash(self, adapter_registry: AdapterRegistry) -> None:
-        """Even if a subpackage is broken, discovery should complete."""
-        # This simply verifies that the function returns without exception.
-        discover_adapters(adapter_registry)
-
     def test_registered_adapter_is_retrievable(self, adapter_registry: AdapterRegistry) -> None:
         discover_adapters(adapter_registry)
         adapter = adapter_registry.get("claude-code")
         assert adapter is not None
         assert adapter.name == "claude-code"
+
+    def test_registered_opencode_is_retrievable(self, adapter_registry: AdapterRegistry) -> None:
+        discover_adapters(adapter_registry)
+        adapter = adapter_registry.get("opencode")
+        assert adapter is not None
+        assert adapter.name == "opencode"
