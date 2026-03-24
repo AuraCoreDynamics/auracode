@@ -7,6 +7,12 @@ import threading
 
 from aiohttp import web
 
+from auracode.shim.ide_websocket import (
+    clear_session,
+    ide_websocket_handler,
+    session_handler,
+    status_handler,
+)
 from auracode.shim.middleware import error_middleware, logging_middleware
 from auracode.shim.models_endpoint import list_models
 from auracode.shim.openai_compat import chat_completions, completions
@@ -26,6 +32,12 @@ def create_app(engine) -> web.Application:
     app.router.add_post("/v1/completions", completions)
     app.router.add_get("/v1/models", list_models)
     app.router.add_get("/health", health_check)
+
+    # IDE WebSocket + management endpoints
+    app.router.add_get("/ws/ide", ide_websocket_handler)
+    app.router.add_get("/api/status", status_handler)
+    app.router.add_get("/api/session/{id}", session_handler)
+    app.router.add_delete("/api/session/{id}", clear_session)
 
     return app
 

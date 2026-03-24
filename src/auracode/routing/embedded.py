@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from typing import Any
+
+import structlog
 
 from auracode.models.context import SessionContext
 from auracode.models.request import RequestIntent
@@ -15,6 +18,8 @@ from auracode.routing.base import (
     ServiceInfo,
 )
 from auracode.routing.intent_map import build_context_prompt, map_intent_to_role
+
+log = structlog.get_logger()
 
 
 class EmbeddedRouterBackend(BaseRouterBackend):
@@ -84,6 +89,51 @@ class EmbeddedRouterBackend(BaseRouterBackend):
             )
         except Exception:
             return False
+
+    # ------------------------------------------------------------------ #
+    # Streaming
+    # ------------------------------------------------------------------ #
+
+    async def route_stream(
+        self,
+        prompt: str,
+        intent: RequestIntent,
+        context: SessionContext | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> AsyncIterator[str]:
+        """Stream response tokens from the fabric.
+
+        Tries ``execute_stream`` first (generator-based streaming).  If the
+        fabric does not support streaming yet, falls back to ``execute`` and
+        yields the complete response as a single chunk.
+        """
+        role = map_intent_to_role(intent)
+        context_prefix = build_context_prompt(context)
+        full_prompt = context_prefix + prompt
+
+        # Attempt true streaming via execute_stream.
+        if hasattr(self._fabric, "execute_stream"):
+            try:
+                stream = self._fabric.execute_stream(role, full_prompt)
+                # execute_stream may be sync iterator — run chunks in thread.
+                sentinel = object()
+                it = iter(stream)
+                while True:
+                    chunk = await asyncio.to_thread(next, it, sentinel)
+                    if chunk is sentinel:
+                        break
+                    yield chunk
+                return
+            except Exception:
+                log.debug(
+                    "embedded.stream_fallback", reason="execute_stream failed, using execute()"
+                )
+
+        # Fallback: non-streaming execute.
+        result_text: str | None = await asyncio.to_thread(self._fabric.execute, role, full_prompt)
+        if result_text is None:
+            raise RuntimeError(f"All models failed for role '{role}' — no response from fabric.")
+        yield result_text
 
     # ------------------------------------------------------------------ #
     # Catalog methods

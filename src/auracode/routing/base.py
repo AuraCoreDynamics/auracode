@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
@@ -83,6 +84,24 @@ class BaseRouterBackend(ABC):
     async def health_check(self) -> bool:
         """Return True if the backend is reachable and operational."""
         ...
+
+    # ── Streaming (default falls back to non-streaming) ────────────
+
+    async def route_stream(
+        self,
+        prompt: str,
+        intent: RequestIntent,
+        context: SessionContext | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> AsyncIterator[str]:
+        """Yield response tokens incrementally.
+
+        The default implementation calls :meth:`route` and yields the
+        complete response as a single chunk.  Backends that support true
+        streaming should override this method.
+        """
+        result = await self.route(prompt, intent, context, options)
+        yield result.content
 
     # ── Optional catalog methods (default implementations) ────────────
 

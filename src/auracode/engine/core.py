@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 import structlog
 
 from auracode.engine.session import SessionManager
@@ -68,6 +70,49 @@ class AuraCodeEngine:
         # Update session history
         self.session_manager.update(session.session_id, request, response)
         return response
+
+    async def execute_stream(self, request: EngineRequest) -> AsyncIterator[str]:
+        """Stream response tokens for an EngineRequest.
+
+        Yields string chunks as they arrive from the router backend.
+        Session resolution and history update are handled identically
+        to :meth:`execute`.
+        """
+        # Resolve session
+        session: SessionContext | None = None
+        if request.context is not None:
+            session = self.session_manager.get(request.context.session_id)
+        if session is None:
+            session = self.session_manager.create(working_directory=".")
+
+        log.info(
+            "engine.execute_stream",
+            request_id=request.request_id,
+            intent=request.intent.value,
+            session_id=session.session_id,
+        )
+
+        collected: list[str] = []
+        try:
+            async for chunk in self.router.route_stream(
+                prompt=request.prompt,
+                intent=request.intent,
+                context=session,
+                options=request.options or None,
+            ):
+                collected.append(chunk)
+                yield chunk
+        except Exception as exc:
+            log.error("engine.execute_stream.failed", request_id=request.request_id, error=str(exc))
+            raise
+
+        # Update session history with the complete response.
+        full_content = "".join(collected)
+        response = EngineResponse(
+            request_id=request.request_id,
+            content=full_content,
+        )
+        self.session_manager.update(session.session_id, request, response)
 
     def get_session(self, session_id: str) -> SessionContext | None:
         """Retrieve a session by ID."""
