@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import sys
+
 import click
 
 from auracode.adapters.claude_code.formatter import format_response
-from auracode.models.request import EngineResponse
 
 
 def _build_raw_input(
@@ -27,12 +29,51 @@ def _build_raw_input(
     return raw
 
 
-def _placeholder_response(prompt: str) -> EngineResponse:
-    """Return a placeholder EngineResponse until the engine is wired in."""
-    return EngineResponse(
-        request_id="placeholder",
-        content=f"[engine not connected] received prompt: {prompt}",
-    )
+def _get_engine():
+    """Bootstrap the AuraCode engine. Returns (engine, adapter) or exits with error."""
+    try:
+        from auracode.app import create_application
+
+        engine, adapter_registry, _, _ = create_application()
+        adapter = adapter_registry.get("claude-code")
+        if adapter is None:
+            click.echo("Error: Claude Code adapter not found in registry.", err=True)
+            sys.exit(1)
+        return engine, adapter
+    except Exception as exc:
+        click.echo(f"Error: Failed to bootstrap AuraCode engine: {exc}", err=True)
+        sys.exit(1)
+
+
+def _run_command(
+    prompt: str, *, intent: str, context: tuple[str, ...], model: str | None, json_mode: bool
+) -> None:
+    """Execute a single prompt through the engine and echo the result."""
+    engine, adapter = _get_engine()
+    raw_input = _build_raw_input(prompt, intent=intent, context=context, model=model)
+
+    async def _execute():
+        request = await adapter.translate_request(raw_input)
+        response = await engine.execute(request)
+        return response
+
+    response = asyncio.run(_execute())
+    click.echo(format_response(response, json_mode=json_mode))
+
+
+def _read_file_content(file_path: str) -> str | None:
+    """Read file content, returning None on error."""
+    from pathlib import Path
+
+    p = Path(file_path)
+    if not p.is_file():
+        click.echo(f"Warning: File not found: {file_path}", err=True)
+        return None
+    try:
+        return p.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        click.echo(f"Warning: Could not read {file_path}: {exc}", err=True)
+        return None
 
 
 @click.group()
@@ -51,16 +92,23 @@ def claude() -> None:
 @click.option("--model", "-m", default=None, help="Model to use for inference.")
 @click.option("--json", "json_mode", is_flag=True, default=False, help="Output response as JSON.")
 def chat(context: tuple[str, ...], model: str | None, json_mode: bool) -> None:
-    """Interactive REPL mode (engine wired in TG6)."""
-    click.echo("AuraCode Claude REPL — engine integration pending (TG6).")
-    click.echo("Type your prompts below. Press Ctrl+C to exit.\n")
+    """Interactive REPL mode."""
+    engine, adapter = _get_engine()
+    click.echo("AuraCode Claude REPL — type your prompts below. Press Ctrl+C to exit.\n")
     try:
         while True:
             try:
                 prompt = click.prompt(">>>", prompt_suffix=" ")
             except click.Abort:
                 break
-            response = _placeholder_response(prompt)
+            raw_input = _build_raw_input(prompt, intent="chat", context=context, model=model)
+
+            async def _execute():
+                request = await adapter.translate_request(raw_input)
+                response = await engine.execute(request)
+                return response
+
+            response = asyncio.run(_execute())
             click.echo(format_response(response, json_mode=json_mode))
     except KeyboardInterrupt:
         click.echo("\nExiting.")
@@ -79,8 +127,7 @@ def chat(context: tuple[str, ...], model: str | None, json_mode: bool) -> None:
 @click.option("--json", "json_mode", is_flag=True, default=False, help="Output response as JSON.")
 def do(prompt: str, context: tuple[str, ...], model: str | None, json_mode: bool) -> None:
     """One-shot code generation from PROMPT."""
-    response = _placeholder_response(prompt)
-    click.echo(format_response(response, json_mode=json_mode))
+    _run_command(prompt, intent="do", context=context, model=model, json_mode=json_mode)
 
 
 @claude.command()
@@ -96,8 +143,14 @@ def do(prompt: str, context: tuple[str, ...], model: str | None, json_mode: bool
 @click.option("--json", "json_mode", is_flag=True, default=False, help="Output response as JSON.")
 def explain(file: str, context: tuple[str, ...], model: str | None, json_mode: bool) -> None:
     """Explain the contents of FILE."""
-    response = _placeholder_response(f"Explain {file}")
-    click.echo(format_response(response, json_mode=json_mode))
+    file_content = _read_file_content(file)
+    if file_content is not None:
+        prompt = f"Explain the following file ({file}):\n\n{file_content}"
+    else:
+        prompt = f"Explain {file}"
+    # Include the target file in context so the adapter can build FileContext
+    all_context = (file,) + context
+    _run_command(prompt, intent="explain", context=all_context, model=model, json_mode=json_mode)
 
 
 @claude.command()
@@ -113,5 +166,10 @@ def explain(file: str, context: tuple[str, ...], model: str | None, json_mode: b
 @click.option("--json", "json_mode", is_flag=True, default=False, help="Output response as JSON.")
 def review(file: str, context: tuple[str, ...], model: str | None, json_mode: bool) -> None:
     """Review code in FILE."""
-    response = _placeholder_response(f"Review {file}")
-    click.echo(format_response(response, json_mode=json_mode))
+    file_content = _read_file_content(file)
+    if file_content is not None:
+        prompt = f"Review the following code ({file}):\n\n{file_content}"
+    else:
+        prompt = f"Review {file}"
+    all_context = (file,) + context
+    _run_command(prompt, intent="review", context=all_context, model=model, json_mode=json_mode)

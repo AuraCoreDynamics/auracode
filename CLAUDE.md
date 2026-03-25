@@ -57,9 +57,18 @@ src/auracode/
       formatter.py         # Rich terminal output formatting
     openai_shim/           # OpenAI API adapter (no CLI — API-only)
       adapter.py           # OpenAIShimAdapter
-    copilot/               # Skeleton
-    aider/                 # Skeleton
-    codestral/             # Skeleton
+    copilot/               # GitHub Copilot CLI adapter (suggest, explain, commit)
+      adapter.py           # CopilotAdapter
+      cli.py               # Click group: suggest, explain, commit
+      formatter.py         # Inline suggestion output formatting
+    aider/                 # Aider file-diffing adapter (code, ask, architect)
+      adapter.py           # AiderAdapter
+      cli.py               # Click group: code, ask, architect
+      formatter.py         # Diff-style output formatting
+    codestral/             # Codestral code-completion adapter (complete, fill, chat)
+      adapter.py           # CodestralAdapter
+      cli.py               # Click group: complete, fill, chat
+      formatter.py         # FIM completion output formatting
   repl/
     console.py             # AuraCodeConsole — interactive REPL loop
     commands.py            # Slash-command registry and built-in handlers
@@ -79,7 +88,7 @@ src/auracode/
     models_endpoint.py     # list_models() handler
     middleware.py           # error_middleware, logging_middleware, CORS
   grid/
-    client.py              # GridDelegateBackend (gRPC with mTLS)
+    client.py              # GridDelegateBackend (gRPC with mTLS, fully implemented)
     failover.py            # FailoverBackend (primary -> fallback)
     serializer.py          # engine_request_to_grid(), grid_response_to_route_result()
     messages.py            # Pure Python dataclasses mirroring proto messages
@@ -97,7 +106,7 @@ src/auracode/
 - ABCs use `@abstractmethod`; no default implementations.
 - `async def` throughout the engine and routing layers.
 - structlog for structured logging.
-- Adapters are subpackages under `adapters/` with a `register(registry)` entry point.
+- Adapters are subpackages under `adapters/` with a `register(registry)` entry point. All 5 adapters (opencode, claude-code, copilot, aider, codestral) plus the openai_shim are fully implemented and wired to the engine.
 - Optional dependencies are grouped: `[api]` for aiohttp, `[grid]` for gRPC, `[all]` for everything.
 - Graceful degradation: missing optional packages produce helpful errors, not crashes.
 
@@ -129,6 +138,27 @@ The routing layer maps each `RequestIntent` to an AuraRouter role:
 | `CHAT` | `reasoning` | Open-ended, benefits from depth |
 | `PLAN` | `reasoning` | Decomposition, frontier capability required |
 
+### Adapter-Specific Intent Mappings
+
+Each adapter maps its native commands to `RequestIntent` values:
+
+| Adapter | Command | Maps to Intent |
+|---------|---------|---------------|
+| **opencode** | (default) | `GENERATE_CODE` |
+| **claude-code** | `do` | `GENERATE_CODE` |
+| **claude-code** | `explain` | `EXPLAIN_CODE` |
+| **claude-code** | `review` | `REVIEW` |
+| **claude-code** | `chat` | `CHAT` |
+| **copilot** | `suggest` | `GENERATE_CODE` |
+| **copilot** | `explain` | `EXPLAIN_CODE` |
+| **copilot** | `commit` | `GENERATE_CODE` |
+| **aider** | `code` | `EDIT_CODE` |
+| **aider** | `ask` | `CHAT` |
+| **aider** | `architect` | `PLAN` |
+| **codestral** | `complete` | `COMPLETE_CODE` |
+| **codestral** | `fill` | `GENERATE_CODE` |
+| **codestral** | `chat` | `CHAT` |
+
 Roles are defined in AuraRouter's `auraconfig.yaml` as ordered model chains. The `"coder"` role might chain `[local-codellama, sonnet, opus]`. The `"reasoning"` role might chain `[opus, deepseek-r1, local-phi3]`. AuraRouter tries each in order until one succeeds.
 
 ## Application Bootstrap
@@ -158,6 +188,15 @@ The bootstrap handles every combination of available/missing dependencies gracef
 | `auracode claude do PROMPT [-c FILE] [-m MODEL] [--json]` | One-shot generation |
 | `auracode claude explain FILE [-c FILE] [-m MODEL] [--json]` | Explain a file |
 | `auracode claude review FILE [-c FILE] [-m MODEL] [--json]` | Review code |
+| `auracode copilot suggest PROMPT [-c FILE] [-m MODEL]` | Inline code suggestion |
+| `auracode copilot explain PROMPT [-c FILE] [-m MODEL]` | Explain code |
+| `auracode copilot commit PROMPT [-c FILE] [-m MODEL]` | Generate commit message |
+| `auracode aider code PROMPT [-c FILE] [-r FILE] [-m MODEL]` | Edit code with diffs |
+| `auracode aider ask PROMPT [-c FILE] [-m MODEL]` | Ask about code |
+| `auracode aider architect PROMPT [-c FILE] [-m MODEL]` | Plan architecture |
+| `auracode codestral complete PROMPT [--prefix P] [--suffix S] [-c FILE] [-m MODEL]` | Code completion (FIM) |
+| `auracode codestral fill PROMPT [--prefix P] [--suffix S] [-c FILE] [-m MODEL]` | Fill-in-the-middle |
+| `auracode codestral chat PROMPT [-c FILE] [-m MODEL]` | Chat about code |
 | `auracode --version` | Show version |
 
 ## API Shim Endpoints
@@ -251,7 +290,7 @@ AuraCode works standalone — it does not require AuraGrid or AuraXLM. But each 
 ## Testing
 
 ```bash
-# Full suite (345 tests)
+# Full suite (360+ tests)
 pytest tests/ -x -q
 
 # By component

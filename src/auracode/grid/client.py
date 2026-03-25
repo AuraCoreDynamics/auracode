@@ -9,6 +9,7 @@ from typing import Any
 from auracode.grid.messages import (
     GridResponse,
     HealthStatus,
+    ModelEntry,
     ModelList,
 )
 from auracode.grid.serializer import (
@@ -104,7 +105,17 @@ class GridDelegateBackend(BaseRouterBackend):
         else:
             self._channel = grpc.aio.insecure_channel(self._endpoint)
 
-        self._stub = self._channel
+        try:
+            from auracode.grid._generated import (
+                auracode_grid_pb2_grpc,  # type: ignore[import-untyped]
+            )
+        except ImportError:
+            # Generated stubs not available — stub will remain as the channel
+            # so that existing mock-based tests keep working.
+            self._stub = self._channel
+            return
+
+        self._stub = auracode_grid_pb2_grpc.AuraCodeGridStub(self._channel)
 
     # ------------------------------------------------------------------
     # BaseRouterBackend interface
@@ -169,17 +180,49 @@ class GridDelegateBackend(BaseRouterBackend):
     async def _call_execute(self, grid_request: Any) -> GridResponse:
         """Invoke the Execute RPC.  Override or mock in tests."""
         self._ensure_channel()
-        # In production this would call the real generated stub.
-        # The stub is set up in _ensure_channel(); here we merely provide
-        # a seam for mocking.
-        raise NotImplementedError("Real gRPC transport not available in stub mode")
+        from auracode.grid._generated import auracode_grid_pb2  # type: ignore[import-untyped]
+
+        proto_req = auracode_grid_pb2.GridRequest(
+            request_id=grid_request.request_id,
+            intent=grid_request.intent,
+            prompt=grid_request.prompt,
+            context_json=grid_request.context_json,
+            options=grid_request.options,
+        )
+        proto_resp = await self._stub.Execute(proto_req, timeout=self._timeout)
+        return GridResponse(
+            request_id=proto_resp.request_id,
+            content=proto_resp.content,
+            model_used=proto_resp.model_used,
+            prompt_tokens=proto_resp.prompt_tokens,
+            completion_tokens=proto_resp.completion_tokens,
+            error=proto_resp.error,
+        )
 
     async def _call_list_models(self) -> ModelList:
         """Invoke the ListModels RPC."""
         self._ensure_channel()
-        raise NotImplementedError("Real gRPC transport not available in stub mode")
+        from auracode.grid._generated import auracode_grid_pb2  # type: ignore[import-untyped]
+
+        proto_resp = await self._stub.ListModels(auracode_grid_pb2.Empty(), timeout=self._timeout)
+        return ModelList(
+            models=[
+                ModelEntry(
+                    model_id=m.model_id,
+                    provider=m.provider,
+                    tags=list(m.tags),
+                )
+                for m in proto_resp.models
+            ]
+        )
 
     async def _call_health_check(self) -> HealthStatus:
         """Invoke the HealthCheck RPC."""
         self._ensure_channel()
-        raise NotImplementedError("Real gRPC transport not available in stub mode")
+        from auracode.grid._generated import auracode_grid_pb2  # type: ignore[import-untyped]
+
+        proto_resp = await self._stub.HealthCheck(auracode_grid_pb2.Empty(), timeout=self._timeout)
+        return HealthStatus(
+            healthy=proto_resp.healthy,
+            version=proto_resp.version,
+        )

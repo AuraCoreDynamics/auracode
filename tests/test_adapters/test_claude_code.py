@@ -164,41 +164,45 @@ class TestCLI:
         assert "explain" in claude.commands
         assert "review" in claude.commands
 
-    def test_do_command(self) -> None:
+    def test_do_command(self, mock_create_application) -> None:
         runner = CliRunner()
         result = runner.invoke(claude, ["do", "write hello world"])
         assert result.exit_code == 0
-        assert "write hello world" in result.output
+        assert "mock response" in result.output
 
-    def test_do_command_json_flag(self) -> None:
+    def test_do_command_json_flag(self, mock_create_application) -> None:
         runner = CliRunner()
         result = runner.invoke(claude, ["do", "--json", "write hello"])
         assert result.exit_code == 0
         data = json.loads(result.output.strip())
         assert "request_id" in data
 
-    def test_explain_command(self) -> None:
+    def test_explain_command(self, mock_create_application) -> None:
         runner = CliRunner()
         result = runner.invoke(claude, ["explain", "myfile.py"])
         assert result.exit_code == 0
-        assert "Explain myfile.py" in result.output
+        assert "mock response" in result.output
 
-    def test_review_command(self) -> None:
+    def test_review_command(self, mock_create_application) -> None:
         runner = CliRunner()
         result = runner.invoke(claude, ["review", "myfile.py"])
         assert result.exit_code == 0
-        assert "Review myfile.py" in result.output
+        assert "mock response" in result.output
 
-    def test_explain_json_flag(self) -> None:
+    def test_explain_json_flag(self, mock_create_application) -> None:
         runner = CliRunner()
         result = runner.invoke(claude, ["explain", "--json", "myfile.py"])
         assert result.exit_code == 0
-        data = json.loads(result.output.strip())
-        assert data["request_id"] == "placeholder"
+        # Extract the JSON portion (may be preceded by a warning for missing files)
+        json_start = result.output.index("{")
+        data = json.loads(result.output[json_start:])
+        assert "request_id" in data
 
-    def test_review_json_flag(self) -> None:
+    def test_review_json_flag(self, mock_create_application) -> None:
         runner = CliRunner()
         result = runner.invoke(claude, ["review", "--json", "myfile.py"])
         assert result.exit_code == 0
-        data = json.loads(result.output.strip())
-        assert data["request_id"] == "placeholder"
+        # Extract the JSON portion (may be preceded by a warning for missing files)
+        json_start = result.output.index("{")
+        data = json.loads(result.output[json_start:])
+        assert "request_id" in data

@@ -17,12 +17,17 @@ class TestDiscoverAdapters:
         discover_adapters(adapter_registry)
         assert "opencode" in adapter_registry.list_adapters()
 
-    def test_skeletons_do_not_register(self, adapter_registry: AdapterRegistry) -> None:
+    def test_discovers_copilot(self, adapter_registry: AdapterRegistry) -> None:
         discover_adapters(adapter_registry)
-        adapters = adapter_registry.list_adapters()
-        assert "copilot" not in adapters
-        assert "aider" not in adapters
-        assert "codestral" not in adapters
+        assert "copilot" in adapter_registry.list_adapters()
+
+    def test_discovers_aider(self, adapter_registry: AdapterRegistry) -> None:
+        discover_adapters(adapter_registry)
+        assert "aider" in adapter_registry.list_adapters()
+
+    def test_discovers_codestral(self, adapter_registry: AdapterRegistry) -> None:
+        discover_adapters(adapter_registry)
+        assert "codestral" in adapter_registry.list_adapters()
 
     def test_registered_adapter_is_retrievable(self, adapter_registry: AdapterRegistry) -> None:
         discover_adapters(adapter_registry)
