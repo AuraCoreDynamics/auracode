@@ -7,6 +7,8 @@ from auracode.models.request import RequestIntent
 
 _MAX_FILE_CHARS = 8_000  # Truncation limit per file in context prompt
 
+DIFF_THRESHOLD_CHARS = 6_000  # ~1500 tokens at ~4 chars/token
+
 INTENT_ROLE_MAP: dict[RequestIntent, str] = {
     RequestIntent.GENERATE_CODE: "coder",
     RequestIntent.EDIT_CODE: "coder",
@@ -16,6 +18,36 @@ INTENT_ROLE_MAP: dict[RequestIntent, str] = {
     RequestIntent.CHAT: "reasoning",
     RequestIntent.PLAN: "reasoning",
 }
+
+
+def classify_modification_type(file_ctx: FileContext) -> str:
+    """Return ``'unified_diff'`` for large files, ``'full_rewrite'`` for small.
+
+    The decision is based on a simple character-length heuristic
+    (see :data:`DIFF_THRESHOLD_CHARS`).  This is O(1) per file — no
+    tokenizer calls, just ``len(content)``.
+    """
+    if file_ctx.content is None:
+        return "full_rewrite"  # no content to diff against
+    if len(file_ctx.content) > DIFF_THRESHOLD_CHARS:
+        return "unified_diff"
+    return "full_rewrite"
+
+
+def build_file_constraints(context: SessionContext | None) -> list[dict[str, str]]:
+    """Build per-file modification type preferences.
+
+    Returns an empty list when *context* is ``None`` or has no files.
+    """
+    if context is None:
+        return []
+    return [
+        {
+            "path": f.path,
+            "preferred_modification": classify_modification_type(f),
+        }
+        for f in context.files
+    ]
 
 
 def map_intent_to_role(intent: RequestIntent) -> str:

@@ -10,6 +10,7 @@ import structlog
 
 from auracode.models.context import SessionContext
 from auracode.models.request import RequestIntent
+from auracode.routing.artifacts import execute_modifications, parse_artifact_payload
 from auracode.routing.base import (
     AnalyzerInfo,
     BaseRouterBackend,
@@ -17,9 +18,15 @@ from auracode.routing.base import (
     RouteResult,
     ServiceInfo,
 )
-from auracode.routing.intent_map import build_context_prompt, map_intent_to_role
+from auracode.routing.intent_map import (
+    build_context_prompt,
+    build_file_constraints,
+    map_intent_to_role,
+)
 
 log = structlog.get_logger()
+
+ACTIONABLE_INTENTS = {RequestIntent.EDIT_CODE, RequestIntent.GENERATE_CODE}
 
 
 class EmbeddedRouterBackend(BaseRouterBackend):
@@ -35,6 +42,55 @@ class EmbeddedRouterBackend(BaseRouterBackend):
 
         self._config_loader = ConfigLoader(config_path=config_path)
         self._fabric = ComputeFabric(config=self._config_loader)
+        self._last_route_options: dict[str, Any] = {}
+
+    # ------------------------------------------------------------------ #
+    # Routing hints
+    # ------------------------------------------------------------------ #
+
+    def _extract_languages(self, context: SessionContext | None) -> list[str]:
+        """Extract unique programming languages from session files."""
+        if context is None:
+            return []
+        seen: set[str] = set()
+        for f in context.files:
+            if f.language and f.language not in seen:
+                seen.add(f.language)
+        return sorted(seen)  # deterministic ordering
+
+    def _build_route_options(
+        self,
+        intent: RequestIntent,
+        context: SessionContext | None,
+        caller_options: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Build the routing options payload.
+
+        Caller-provided options take precedence on key collision.
+        """
+        opts: dict[str, Any] = {
+            "intent": intent.value,
+            "routing_hints": self._extract_languages(context),
+            "file_constraints": build_file_constraints(context),
+        }
+        if caller_options:
+            opts.update(caller_options)
+        return opts
+
+    @staticmethod
+    def _routing_hints_prefix(route_options: dict[str, Any]) -> str:
+        """Format route options as a structured prefix block for the prompt."""
+        hints = route_options.get("routing_hints", [])
+        intent_val = route_options.get("intent", "")
+        if not hints and not intent_val:
+            return ""
+        import json
+
+        block = json.dumps(
+            {"intent": intent_val, "routing_hints": hints},
+            separators=(",", ":"),
+        )
+        return f"[ROUTE_OPTIONS]{block}[/ROUTE_OPTIONS]\n"
 
     # ------------------------------------------------------------------ #
     # BaseRouterBackend interface
@@ -49,22 +105,72 @@ class EmbeddedRouterBackend(BaseRouterBackend):
     ) -> RouteResult:
         role = map_intent_to_role(intent)
 
+        route_options = self._build_route_options(intent, context, options)
+        self._last_route_options = route_options
+
         context_prefix = build_context_prompt(context)
-        full_prompt = context_prefix + prompt
+        hints_prefix = self._routing_hints_prefix(route_options)
+        full_prompt = hints_prefix + context_prefix + prompt
 
-        result_text: str | None = await asyncio.to_thread(self._fabric.execute, role, full_prompt)
+        fabric_result = await asyncio.to_thread(
+            self._fabric.execute,
+            role,
+            full_prompt,
+            options=route_options,
+        )
 
-        if result_text is None:
+        if fabric_result is None:
             raise RuntimeError(f"All models failed for role '{role}' — no response from fabric.")
 
-        # Try to identify which model was used from the config chain.
-        chain = self._config_loader.get_role_chain(role)
-        model_used = chain[0] if chain else "unknown"
+        # fabric.execute() returns GenerateResult or str — normalise to str
+        result_text = fabric_result.text if hasattr(fabric_result, "text") else str(fabric_result)
+        model_used = (
+            fabric_result.model_id
+            if hasattr(fabric_result, "model_id") and fabric_result.model_id
+            else (self._config_loader.get_role_chain(role) or ["unknown"])[0]
+        )
 
-        return RouteResult(
+        route_result = RouteResult(
             content=result_text,
             model_used=model_used,
         )
+
+        # --- Artifact execution for actionable intents ----------------
+        if intent in ACTIONABLE_INTENTS and route_result:
+            payload = parse_artifact_payload(route_result.content)
+            if payload and payload.modifications:
+                working_dir = context.working_directory if context else "."
+                results = execute_modifications(payload, working_dir)
+
+                upstream_trace = route_result.metadata.get("execution_trace", [])
+                executor_trace: list[str] = []
+                for r in results:
+                    if r.success:
+                        executor_trace.append(
+                            f"Executor: {r.file_path} {r.modification_type} applied"
+                        )
+                    else:
+                        executor_trace.append(f"Executor: {r.file_path} FAILED — {r.error}")
+                any_failed = any(not r.success for r in results)
+                if any_failed:
+                    executor_trace.append("Executor: ROLLBACK — all files restored")
+                full_trace = upstream_trace + executor_trace
+
+                route_result = RouteResult(
+                    content=route_result.content,
+                    model_used=route_result.model_used,
+                    usage=route_result.usage,
+                    metadata={
+                        **route_result.metadata,
+                        "artifact_execution": [
+                            {"file": r.file_path, "ok": r.success, "error": r.error}
+                            for r in results
+                        ],
+                        "execution_trace": full_trace,
+                    },
+                )
+
+        return route_result
 
     async def list_models(self) -> list[ModelInfo]:
         model_ids = self._config_loader.get_all_model_ids()
@@ -130,10 +236,10 @@ class EmbeddedRouterBackend(BaseRouterBackend):
                 )
 
         # Fallback: non-streaming execute.
-        result_text: str | None = await asyncio.to_thread(self._fabric.execute, role, full_prompt)
-        if result_text is None:
+        fabric_result = await asyncio.to_thread(self._fabric.execute, role, full_prompt)
+        if fabric_result is None:
             raise RuntimeError(f"All models failed for role '{role}' — no response from fabric.")
-        yield result_text
+        yield fabric_result.text if hasattr(fabric_result, "text") else str(fabric_result)
 
     # ------------------------------------------------------------------ #
     # Catalog methods
