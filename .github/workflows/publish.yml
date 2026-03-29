@@ -28,9 +28,12 @@ jobs:
     - name: Install build dependencies
       run: python -m pip install build httpx --user
 
-    - name: Build and Specialize
+    - name: Run model specialization
       env:
         AURAGRID_ENDPOINT: ${{ secrets.PROD_AURAGRID_ENDPOINT }}
+      run: python scripts/specialize_model.py
+
+    - name: Build package
       run: python -m build
 
     - name: Commit specialized model to LFS
