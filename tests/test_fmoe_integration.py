@@ -11,6 +11,7 @@ Validates the end-to-end pipeline across AuraCode's routing layer:
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import json
 import sys
 import textwrap
@@ -329,6 +330,10 @@ class TestSchemaToArtifactRoundTrip:
         assert (tmp_path / "new.ts").read_text() == "export const x = 1;\n"
         assert "BETA" in (tmp_path / "old.py").read_text()
 
+    @pytest.mark.skipif(
+        not importlib.util.find_spec("aurarouter"),
+        reason="aurarouter not installed",
+    )
     def test_schema_conforms_to_parser_expectations(self):
         """Verify MODIFICATIONS_SCHEMA fields match what parse_artifact_payload expects."""
         from aurarouter.fabric import MODIFICATIONS_SCHEMA
