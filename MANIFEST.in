@@ -3,4 +3,5 @@ include LICENSE
 include CLAUDE.md
 include auracode.yaml
 recursive-include src/auracode/grid/proto *.proto
+recursive-include src/auracode/assets *.gguf
 include src/auracode/py.typed

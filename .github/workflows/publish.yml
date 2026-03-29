@@ -13,10 +13,12 @@ jobs:
       url: https://pypi.org/p/auracode
     permissions:
       id-token: write
-      contents: read
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        lfs: true
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -24,10 +26,20 @@ jobs:
         python-version: "3.12"
 
     - name: Install build dependencies
-      run: python -m pip install build --user
+      run: python -m pip install build httpx --user
 
-    - name: Build binary wheel and source tarball
+    - name: Build and Specialize
+      env:
+        AURAGRID_ENDPOINT: ${{ secrets.PROD_AURAGRID_ENDPOINT }}
       run: python -m build
+
+    - name: Commit specialized model to LFS
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add src/auracode/assets/specialized.gguf
+        git commit -m "Update specialized model [skip ci]" || echo "No changes to commit"
+        git push
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1

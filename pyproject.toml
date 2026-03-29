@@ -67,6 +67,7 @@ dev = [
     "pytest-aiohttp",
     "ruff",
     "pre-commit",
+    "httpx",
     "auracode[all]",
 ]
 
@@ -83,7 +84,7 @@ auracode = "auracode.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-auracode = ["py.typed"]
+auracode = ["py.typed", "assets/*.gguf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
