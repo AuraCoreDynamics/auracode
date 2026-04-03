@@ -41,8 +41,13 @@ def grid_response_to_route_result(response: GridResponse) -> RouteResult:
         prompt_tokens=response.prompt_tokens,
         completion_tokens=response.completion_tokens,
     )
+    # Carry any metadata fields the grid response may provide.
+    metadata: dict[str, Any] = {}
+    if hasattr(response, "metadata") and response.metadata:
+        metadata = dict(response.metadata)
     return RouteResult(
         content=response.content,
         model_used=response.model_used,
         usage=usage,
+        metadata=metadata,
     )

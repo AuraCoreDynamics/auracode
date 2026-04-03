@@ -106,7 +106,12 @@ def create_application(
             from auracode.grid.client import GridDelegateBackend
             from auracode.grid.failover import FailoverBackend
 
-            grid_backend = GridDelegateBackend(config.grid_endpoint)
+            grid_backend = GridDelegateBackend(
+                config.grid_endpoint,
+                tls_cert=config.grid_tls_cert,
+                tls_key=config.grid_tls_key,
+                ca_cert=config.grid_ca_cert,
+            )
             if embedded_backend:
                 default_backend = FailoverBackend(
                     grid_backend, embedded_backend, config.local_context_limit

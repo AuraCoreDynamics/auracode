@@ -202,12 +202,16 @@ class TestMcpServerIntegration:
             result = create_mcp_server(engine)
             assert result is not None
             assert result._name == "auracode"
-            # Verify all 4 tools were registered
+            # Verify core tools plus new FMoE tools were registered
             assert "auracode_generate" in registered_tools
             assert "auracode_explain" in registered_tools
             assert "auracode_review" in registered_tools
             assert "auracode_models" in registered_tools
-            assert len(registered_tools) == 4
+            assert "auracode_plan" in registered_tools
+            assert "auracode_refactor" in registered_tools
+            assert "auracode_review_diff" in registered_tools
+            assert "auracode_security_review" in registered_tools
+            assert len(registered_tools) == 9
         finally:
             if saved is not None:
                 sys.modules["mcp"] = saved

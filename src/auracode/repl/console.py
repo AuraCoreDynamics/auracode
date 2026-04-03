@@ -15,7 +15,19 @@ from auracode.engine.core import AuraCodeEngine
 from auracode.engine.preferences import PreferencesManager
 from auracode.engine.registry import AdapterRegistry
 from auracode.models.context import FileContext, SessionContext
-from auracode.models.request import EngineRequest, EngineResponse, RequestIntent
+from auracode.models.request import (
+    EngineRequest,
+    EngineResponse,
+    ExecutionMode,
+    ExecutionPolicy,
+    LatencyBudget,
+    RequestIntent,
+    RetrievalMode,
+    RetrievalPolicy,
+    RoutingPreference,
+    SovereigntyEnforcement,
+    SovereigntyPolicy,
+)
 
 # Intent keywords that appear at the start of a prompt.
 _INTENT_PREFIXES: dict[str, RequestIntent] = {
@@ -28,6 +40,10 @@ _INTENT_PREFIXES: dict[str, RequestIntent] = {
     "create": RequestIntent.GENERATE_CODE,
     "implement": RequestIntent.GENERATE_CODE,
     "complete": RequestIntent.COMPLETE_CODE,
+    "refactor": RequestIntent.REFACTOR,
+    "security": RequestIntent.SECURITY_REVIEW,
+    "test": RequestIntent.GENERATE_TESTS,
+    "trace": RequestIntent.ARCHITECTURE_TRACE,
 }
 
 _THEME = Theme(
@@ -112,15 +128,55 @@ class AuraCodeConsole:
 
         context = self._build_session_context()
 
+        # Build execution policy from session state (precedence: session > prefs > config defaults).
+        exec_mode = getattr(self, "_execution_mode", "standard")
+        sov_enforcement = getattr(self, "_sovereignty_enforcement", "none")
+        sens_label = getattr(self, "_sensitivity_label", None)
+        ret_mode = getattr(self, "_retrieval_mode", "disabled")
+        routing_pref = getattr(self, "_routing_preference", "auto")
+
+        try:
+            mode = ExecutionMode(exec_mode)
+        except ValueError:
+            mode = ExecutionMode.STANDARD
+        try:
+            routing = RoutingPreference(routing_pref)
+        except ValueError:
+            routing = RoutingPreference.AUTO
+        try:
+            sov = SovereigntyEnforcement(sov_enforcement)
+        except ValueError:
+            sov = SovereigntyEnforcement.NONE
+        try:
+            ret = RetrievalMode(ret_mode)
+        except ValueError:
+            ret = RetrievalMode.DISABLED
+
+        policy = ExecutionPolicy(
+            mode=mode,
+            routing=routing,
+            sovereignty=SovereigntyPolicy(
+                enforcement=sov,
+                sensitivity_label=sens_label,
+            ),
+            retrieval=RetrievalPolicy(mode=ret),
+            latency=LatencyBudget(),
+        )
+
         request = EngineRequest(
             request_id=str(uuid.uuid4()),
             intent=intent,
             prompt=text,
             context=context,
             adapter_name=self.active_adapter.name,
+            execution_policy=policy,
         )
 
         response: EngineResponse = await self.engine.execute(request)
+
+        # Stash execution metadata for /trace command.
+        if response.execution_metadata is not None:
+            self._last_execution_metadata = response.execution_metadata
 
         # Update session history.
         self.session_history.append({"role": "user", "content": text})

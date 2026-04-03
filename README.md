@@ -130,12 +130,85 @@ AuraCode exposes itself as an MCP (Model Context Protocol) server, making its ca
 **Exposed MCP tools:**
 | Tool | Description |
 |------|-------------|
-| `auracode_generate` | Generate code with configurable intent |
+| `auracode_generate` | Generate code with configurable intent, mode, and routing |
+| `auracode_plan` | Plan architecture or implementation approach |
+| `auracode_refactor` | Refactor code with diff-aware modifications |
+| `auracode_review_diff` | Review code diffs for correctness and security |
+| `auracode_security_review` | Security-focused code review |
 | `auracode_explain` | Explain a file's contents |
 | `auracode_review` | Review code in a file |
+| `auracode_trace` | Show last execution trace metadata |
 | `auracode_models` | List available models |
 
 This means AuraRouter can discover and invoke AuraCode's specialized routing graphs as MCP services — a pattern called Reverse-MCP. AuraCode consumes AuraRouter for model routing; AuraRouter consumes AuraCode for coding-specific orchestration. Each tool becomes a composable building block in a larger system.
+
+### Capability-Aware Execution
+
+AuraCode supports typed execution policies that control how each request is processed:
+
+**Execution Modes:**
+| Mode | Description |
+|------|-------------|
+| `standard` | Default single-pass execution |
+| `speculative` | Speculative verification with multiple models |
+| `monologue` | Extended reasoning trace |
+
+**Routing Preferences:**
+| Preference | Behavior |
+|------------|----------|
+| `auto` | Let AuraCode decide based on context size and health |
+| `prefer_local` | Prefer local models, fall back to cloud if needed |
+| `require_local` | Local only — never send to cloud |
+| `prefer_grid` | Prefer AuraGrid distributed execution |
+| `require_grid` | Grid only — fail if grid unavailable |
+| `require_verified` | Grid with verification — highest assurance |
+
+**Sovereignty Controls:**
+AuraCode supports sovereignty enforcement for teams handling sensitive data:
+- `none` — No restrictions on execution location
+- `warn` — Log when requests cross sovereignty boundaries
+- `enforce` — Strictly enforce data locality; block cloud execution when `allow_cloud=false`
+
+**Retrieval Mode:**
+| Mode | Behavior |
+|------|----------|
+| `disabled` | No retrieval augmentation |
+| `auto` | Use RAG when available |
+| `required` | Fail or degrade visibly if RAG unavailable |
+
+**REPL commands for FMoE controls:**
+```
+/mode [standard|speculative|monologue]   # Set execution mode
+/sovereignty [none|warn|enforce]         # Set sovereignty posture
+/retrieval [disabled|auto|required]      # Set retrieval mode
+/trace                                    # Show last execution trace
+/capabilities                            # Show backend capabilities
+/status                                   # Shows mode, sovereignty, retrieval state
+```
+
+**Degradation is always explicit.** When a requested capability isn't available — e.g., speculative mode on a basic fabric, or retrieval-required on a backend without RAG — AuraCode records a typed `DegradationNotice` and surfaces it through `/trace` and `/status`. Silent fallback is treated as a bug.
+
+### Grid PKI and Secure Transport
+
+When connecting to AuraGrid, AuraCode supports full mTLS:
+
+```yaml
+grid_endpoint: grid.internal.corp:50051
+grid_tls_cert: /etc/pki/auracode-client.crt
+grid_tls_key: /etc/pki/auracode-client.key
+grid_ca_cert: /etc/pki/corp-ca.crt
+```
+
+When TLS material is provided, AuraCode creates a secure gRPC channel. Without it, an insecure channel is used (suitable for development clusters).
+
+### Policy Precedence
+
+When execution controls can be set at multiple levels, the precedence order is:
+
+1. **Per-request** (highest) — explicit `ExecutionPolicy` on `EngineRequest`
+2. **Session** — REPL `/mode`, `/sovereignty`, `/retrieval` commands
+3. **Preferences** — `~/.auracode/preferences.yaml`
+4. **Config** — `auracode.yaml` defaults (lowest)
 
 ---
 
@@ -176,6 +249,18 @@ local_context_limit: 100000
 
 # Per-adapter configuration. Keys are adapter names (e.g., "claude-code").
 adapters: {}
+
+# Grid TLS/PKI (mTLS for secure grid communication)
+grid_tls_cert: null       # Client certificate path
+grid_tls_key: null        # Client private key path
+grid_ca_cert: null        # CA certificate path
+grid_server_name: null    # Server name override for PKI
+
+# Default execution policy
+default_execution_mode: standard         # standard, speculative, monologue
+default_sovereignty_enforcement: none    # none, warn, enforce
+default_sensitivity_label: null          # e.g., "SECRET"
+default_retrieval_mode: disabled         # disabled, auto, required
 ```
 
 ### User Preferences
@@ -191,6 +276,11 @@ history_limit: 100               # Max messages retained in session history
 markdown_rendering: true         # Render markdown in REPL output
 prefer_local: false              # Prefer local models over cloud
 active_analyzer: null            # Active route analyzer (e.g., "auraxlm-moe")
+default_execution_mode: standard # Execution mode (standard/speculative/monologue)
+default_sovereignty_enforcement: none  # Sovereignty posture
+default_sensitivity_label: null  # Sensitivity label
+default_retrieval_mode: disabled # Retrieval mode (disabled/auto/required)
+default_routing_preference: auto # Routing preference
 ```
 
 Use the `/prefs` slash command in the REPL to view, set, or reset preferences interactively:

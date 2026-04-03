@@ -72,16 +72,28 @@ async def _handle_status(console: AuraCodeConsole, args: str) -> str | None:
     active_analyzer = await console.engine.router.get_active_analyzer()
     adapter_name = console.active_adapter.name if console.active_adapter else "none"
     analyzer_name = active_analyzer.analyzer_id if active_analyzer else "none"
+    exec_mode = getattr(console, "_execution_mode", "standard")
+    sov_mode = getattr(console, "_sovereignty_enforcement", "none")
+    ret_mode = getattr(console, "_retrieval_mode", "disabled")
     lines = [
         "",
         "AuraCode Status",
         f"  Active adapter:  {adapter_name}",
         f"  Active analyzer: {analyzer_name}",
+        f"  Execution mode:  {exec_mode}",
+        f"  Sovereignty:     {sov_mode}",
+        f"  Retrieval:       {ret_mode}",
         f"  Router:          {'healthy' if healthy else 'unavailable'}",
         f"  Catalog:         {len(models)} models, "
         f"{len(services)} services, {len(analyzers)} analyzers",
         f"  Session history: {len(console.session_history)} messages",
     ]
+
+    # Show active degradations if any.
+    last_meta = getattr(console, "_last_execution_metadata", None)
+    if last_meta and last_meta.degradations:
+        lines.append(f"  Active degradations: {len(last_meta.degradations)}")
+
     return "\n".join(lines)
 
 
@@ -321,6 +333,122 @@ async def _handle_review(console: AuraCodeConsole, args: str) -> str | None:
     return await console.send_prompt(f"review {path}", intent_hint="review")
 
 
+# ── FMoE control commands (TG5) ──────────────────────────────────────
+
+
+async def _handle_mode(console: AuraCodeConsole, args: str) -> str | None:
+    """View or set the execution mode."""
+    from auracode.models.request import ExecutionMode
+
+    name = args.strip().lower()
+    if not name:
+        current = getattr(console, "_execution_mode", "standard")
+        modes = [m.value for m in ExecutionMode]
+        lines = [f"Execution mode: {current}", f"Available: {', '.join(modes)}"]
+        return "\n".join(lines)
+
+    try:
+        mode = ExecutionMode(name)
+    except ValueError:
+        return f"Unknown mode '{name}'. Available: standard, speculative, monologue"
+
+    console._execution_mode = mode.value
+    if hasattr(console, "preferences_manager") and console.preferences_manager:
+        try:
+            console.preferences_manager.set("default_execution_mode", mode.value)
+        except (AttributeError, Exception):
+            pass
+    return f"Execution mode: {mode.value}"
+
+
+async def _handle_sovereignty(console: AuraCodeConsole, args: str) -> str | None:
+    """View or set sovereignty posture."""
+    from auracode.models.request import SovereigntyEnforcement
+
+    name = args.strip().lower()
+    if not name:
+        current = getattr(console, "_sovereignty_enforcement", "none")
+        label = getattr(console, "_sensitivity_label", None)
+        lines = [f"Sovereignty: {current}"]
+        if label:
+            lines.append(f"Sensitivity label: {label}")
+        return "\n".join(lines)
+
+    try:
+        enforcement = SovereigntyEnforcement(name)
+    except ValueError:
+        return f"Unknown enforcement '{name}'. Available: none, warn, enforce"
+
+    console._sovereignty_enforcement = enforcement.value
+    return f"Sovereignty: {enforcement.value}"
+
+
+async def _handle_retrieval(console: AuraCodeConsole, args: str) -> str | None:
+    """View or set retrieval mode."""
+    from auracode.models.request import RetrievalMode
+
+    name = args.strip().lower()
+    if not name:
+        current = getattr(console, "_retrieval_mode", "disabled")
+        return f"Retrieval mode: {current}"
+
+    try:
+        mode = RetrievalMode(name)
+    except ValueError:
+        return f"Unknown retrieval mode '{name}'. Available: disabled, auto, required"
+
+    console._retrieval_mode = mode.value
+    return f"Retrieval mode: {mode.value}"
+
+
+async def _handle_trace(console: AuraCodeConsole, args: str) -> str | None:
+    """Show the last execution trace/metadata."""
+    last_meta = getattr(console, "_last_execution_metadata", None)
+    if last_meta is None:
+        return "No execution trace available. Send a prompt first."
+
+    lines = ["Last execution trace:"]
+    if last_meta.analyzer_used:
+        lines.append(f"  Analyzer: {last_meta.analyzer_used}")
+    if last_meta.execution_mode_used:
+        lines.append(f"  Mode used: {last_meta.execution_mode_used}")
+    if last_meta.sovereignty_outcome:
+        lines.append(f"  Sovereignty: {last_meta.sovereignty_outcome}")
+    if last_meta.retrieval_summary:
+        lines.append(f"  Retrieval: {last_meta.retrieval_summary}")
+    if last_meta.trace_id:
+        lines.append(f"  Trace ID: {last_meta.trace_id}")
+    if last_meta.verification_outcome:
+        lines.append(f"  Verification: {last_meta.verification_outcome}")
+    if last_meta.degradations:
+        lines.append(f"  Degradations ({len(last_meta.degradations)}):")
+        for d in last_meta.degradations:
+            lines.append(f"    {d.capability}: {d.requested} -> {d.actual} ({d.reason})")
+    if last_meta.backend_warnings:
+        lines.append(f"  Warnings: {'; '.join(last_meta.backend_warnings)}")
+    if len(lines) == 1:
+        lines.append("  (no metadata captured)")
+    return "\n".join(lines)
+
+
+async def _handle_capabilities(console: AuraCodeConsole, args: str) -> str | None:
+    """Show backend capabilities."""
+    try:
+        caps = await console.engine.router.get_capabilities()
+    except Exception:
+        return "Unable to query backend capabilities."
+
+    if not caps:
+        return "No capability data available from backend."
+
+    lines = ["Backend capabilities:"]
+    for c in caps:
+        status = "supported" if c.supported else "not supported"
+        desc = f" — {c.description}" if c.description else ""
+        lines.append(f"  {c.capability_id}: {status}{desc}")
+    return "\n".join(lines)
+
+
 def register_builtin_commands() -> None:
     """Register all built-in slash commands."""
     _COMMANDS.clear()
@@ -353,4 +481,13 @@ def register_builtin_commands() -> None:
     )
     register(SlashCommand("explain", "Explain a file", _handle_explain))
     register(SlashCommand("review", "Review a file", _handle_review))
+    register(SlashCommand("mode", "View or set execution mode", _handle_mode))
+    register(
+        SlashCommand("sovereignty", "View or set sovereignty posture", _handle_sovereignty, ["sov"])
+    )
+    register(SlashCommand("retrieval", "View or set retrieval mode", _handle_retrieval, ["rag"]))
+    register(SlashCommand("trace", "Show last execution trace", _handle_trace))
+    register(
+        SlashCommand("capabilities", "Show backend capabilities", _handle_capabilities, ["caps"])
+    )
     register(SlashCommand("quit", "Exit AuraCode", _handle_quit, ["q", "exit"]))

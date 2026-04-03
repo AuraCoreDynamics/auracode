@@ -20,3 +20,9 @@ class UserPreferences(BaseModel):
     markdown_rendering: bool = True
     prefer_local: bool = False
     active_analyzer: str | None = None
+    # FMoE preference fields (TG8)
+    default_execution_mode: str = "standard"
+    default_sovereignty_enforcement: str = "none"
+    default_sensitivity_label: str | None = None
+    default_retrieval_mode: str = "disabled"
+    default_routing_preference: str = "auto"

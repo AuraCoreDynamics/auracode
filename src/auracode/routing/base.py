@@ -50,6 +50,16 @@ class AnalyzerInfo(BaseModel):
     is_active: bool = False
 
 
+class BackendCapability(BaseModel):
+    """Describes a single capability a backend supports."""
+
+    model_config = ConfigDict(frozen=True)
+
+    capability_id: str
+    supported: bool = True
+    description: str = ""
+
+
 class RouteResult(BaseModel):
     """The outcome of a single routing + inference call."""
 
@@ -59,6 +69,7 @@ class RouteResult(BaseModel):
     model_used: str
     usage: TokenUsage | None = None
     metadata: dict[str, Any] = {}
+    degradations: list[Any] = []
 
 
 class BaseRouterBackend(ABC):
@@ -101,7 +112,13 @@ class BaseRouterBackend(ABC):
         streaming should override this method.
         """
         result = await self.route(prompt, intent, context, options)
+        # Stash metadata for retrieval after streaming completes.
+        self._last_stream_result = result
         yield result.content
+
+    def get_last_stream_result(self) -> RouteResult | None:
+        """Return the RouteResult from the most recent stream, if available."""
+        return getattr(self, "_last_stream_result", None)
 
     # ── Optional catalog methods (default implementations) ────────────
 
@@ -120,6 +137,10 @@ class BaseRouterBackend(ABC):
     async def set_active_analyzer(self, analyzer_id: str | None) -> bool:
         """Set the active route analyzer. Returns True on success."""
         return False
+
+    async def get_capabilities(self) -> list[BackendCapability]:
+        """Return capabilities supported by this backend."""
+        return []
 
     async def catalog_summary(self) -> dict[str, int]:
         """Return a summary of catalog counts."""

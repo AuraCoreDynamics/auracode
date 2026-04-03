@@ -6,7 +6,11 @@ import logging
 from typing import Any
 
 from auracode.models.context import SessionContext
-from auracode.models.request import RequestIntent
+from auracode.models.request import (
+    DegradationNotice,
+    RequestIntent,
+    RoutingPreference,
+)
 from auracode.routing.base import (
     AnalyzerInfo,
     BaseRouterBackend,
@@ -70,18 +74,105 @@ class FailoverBackend(BaseRouterBackend):
         context: SessionContext | None = None,
         options: dict[str, Any] | None = None,
     ) -> RouteResult:
+        # Extract routing preference from policy if available.
+        policy_dict = (
+            (options or {}).get("_execution_policy")
+            or (options or {}).get("execution_policy")
+            or {}
+        )
+        routing_pref = (
+            RoutingPreference(policy_dict.get("routing", "auto"))
+            if policy_dict
+            else RoutingPreference.AUTO
+        )
+
+        # Sovereignty enforcement: if enforce + no cloud, force local.
+        sov = policy_dict.get("sovereignty", {}) if policy_dict else {}
+        if sov.get("enforcement") == "enforce" and not sov.get("allow_cloud", True):
+            if routing_pref == RoutingPreference.REQUIRE_GRID:
+                raise RuntimeError(
+                    "Conflict: sovereignty policy forbids cloud execution "
+                    "but routing requires grid."
+                )
+            logger.info("Sovereignty enforces local-only; routing to fallback.")
+            return await self._fallback.route(prompt, intent, context, options)
+
+        # Hard requirements: routing policy overrides threshold logic.
+        if routing_pref == RoutingPreference.REQUIRE_GRID:
+            return await self._route_require_primary(prompt, intent, context, options)
+        if routing_pref == RoutingPreference.REQUIRE_LOCAL:
+            return await self._fallback.route(prompt, intent, context, options)
+
         estimated = self._estimate_tokens(prompt, context)
 
-        # If over threshold, go directly to fallback.
+        # FIXED: Large requests should PREFER primary (Grid), not bypass it.
+        # Over-threshold = request is too large for local, send to Grid.
         if estimated > self._threshold:
             logger.info(
-                "Estimated tokens (%d) exceed threshold (%d); using fallback.",
+                "Estimated tokens (%d) exceed threshold (%d); preferring primary (grid).",
                 estimated,
                 self._threshold,
             )
-            return await self._fallback.route(prompt, intent, context, options)
+            try:
+                primary_healthy = await self._primary.health_check()
+                if primary_healthy:
+                    return await self._primary.route(prompt, intent, context, options)
+            except Exception:
+                logger.warning(
+                    "Primary route failed for over-threshold request; falling back.", exc_info=True
+                )
+            # If primary not available, fall back but record degradation.
+            result = await self._fallback.route(prompt, intent, context, options)
+            return RouteResult(
+                content=result.content,
+                model_used=result.model_used,
+                usage=result.usage,
+                metadata=result.metadata,
+                degradations=list(result.degradations)
+                + [
+                    DegradationNotice(
+                        capability="routing",
+                        requested="prefer_grid",
+                        actual="fallback_local",
+                        reason=f"Grid unavailable for large request ({estimated} est. tokens).",
+                    )
+                ],
+            )
 
-        # Check if primary is healthy before attempting.
+        # Under threshold: prefer based on routing pref or default order.
+        if routing_pref == RoutingPreference.PREFER_GRID:
+            return await self._try_primary_then_fallback(prompt, intent, context, options)
+
+        # Default: try primary if healthy, else fallback.
+        return await self._try_primary_then_fallback(prompt, intent, context, options)
+
+    async def _route_require_primary(
+        self,
+        prompt: str,
+        intent: RequestIntent,
+        context: SessionContext | None,
+        options: dict[str, Any] | None,
+    ) -> RouteResult:
+        """Route with require_grid — no silent fallback."""
+        primary_healthy = False
+        try:
+            primary_healthy = await self._primary.health_check()
+        except Exception:
+            pass
+        if not primary_healthy:
+            raise RuntimeError(
+                "Grid execution required by policy but primary backend is unavailable."
+            )
+        return await self._primary.route(prompt, intent, context, options)
+
+    async def _try_primary_then_fallback(
+        self,
+        prompt: str,
+        intent: RequestIntent,
+        context: SessionContext | None,
+        options: dict[str, Any] | None,
+    ) -> RouteResult:
+        """Try primary, fall back on failure."""
         primary_healthy = False
         try:
             primary_healthy = await self._primary.health_check()
@@ -92,7 +183,6 @@ class FailoverBackend(BaseRouterBackend):
             logger.info("Primary unhealthy; routing to fallback.")
             return await self._fallback.route(prompt, intent, context, options)
 
-        # Try primary, fall back on error.
         try:
             result = await self._primary.route(prompt, intent, context, options)
             logger.debug("Primary backend succeeded.")

@@ -28,3 +28,15 @@ class SessionContext(BaseModel):
     files: list[FileContext] = []
     history: list[dict[str, str]] = []
     metadata: dict[str, Any] = {}
+    # Context semantics for sovereignty/retrieval-aware routing (TG2/TG7).
+    project_id: str | None = None
+    sensitivity_label: str | None = None
+    changed_files: list[str] = []
+    diff_summary: str | None = None
+    retrieval_hints: list[str] = []
+    # Context semantics (TG2)
+    changed_files: list[str] = []
+    diff_summary: str | None = None
+    project_id: str | None = None
+    sensitivity_label: str | None = None
+    retrieval_hints: list[str] = []

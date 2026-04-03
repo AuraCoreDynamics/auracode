@@ -28,6 +28,10 @@ Adapters (CLI, IDE, MCP, API shim)
 - **Adapter pattern over plugin system.** Adapters are discovered via `importlib` package scanning. No entry points, no plugin registry. The adapter set is known at build time — we're cloning specific tools, not building a marketplace.
 - **AuraRouter as library dependency, not fork.** AuraCode imports AuraRouter classes directly. `BaseRouterBackend` provides the abstraction boundary. If AuraRouter's API changes, only `EmbeddedRouterBackend` needs updating.
 - **OpenAI-compatible API as universal shim.** One endpoint covers most IDE extensions. No need for per-extension protocol implementations.
+- **Typed execution policy over options bag.** `ExecutionPolicy` on `EngineRequest` is the source of truth for routing decisions (mode, sovereignty, retrieval, latency). Legacy `options: dict` remains as a compatibility escape hatch; the engine normalizes options into typed policy via `normalize_options_to_policy()`.
+- **Explicit degradation over silent fallback.** When a requested capability cannot be satisfied (e.g., `require_grid` on a local-only backend), the system records a `DegradationNotice` and surfaces it through `ExecutionMetadata`. Silent fallback is a bug.
+- **Capability-aware routing.** `EmbeddedRouterBackend` checks requested execution mode and routing preference against actual fabric capabilities and records typed degradation notices.
+- **Policy precedence:** per-request `ExecutionPolicy` > REPL session state > `UserPreferences` > `AuraCodeConfig` defaults.
 - **Failover as backend wrapper, not engine logic.** `FailoverBackend` composes grid + local backends. The engine always talks to one backend — composition happens outside.
 - **Async-first engine.** All engine and routing operations are `async`. Synchronous AuraRouter calls are wrapped with `asyncio.to_thread()`.
 - **Frozen domain models.** All Pydantic models use `ConfigDict(frozen=True)` for immutability. Exception: `AuraCodeConfig` is mutable for runtime overrides.
@@ -123,6 +127,15 @@ Config lookup chain: `--config` flag > `./auracode.yaml` > `~/.auracode.yaml` > 
 | `grid_failover_to_local` | `bool` | `true` | Fall back to local if grid unavailable |
 | `local_context_limit` | `int` | `100000` | Token threshold for grid delegation |
 | `adapters` | `dict` | `{}` | Per-adapter configuration blocks |
+| `grid_tls_cert` | `str \| null` | `null` | Client TLS certificate path (mTLS) |
+| `grid_tls_key` | `str \| null` | `null` | Client TLS private key path |
+| `grid_ca_cert` | `str \| null` | `null` | CA certificate path |
+| `grid_server_name` | `str \| null` | `null` | Server name override for PKI |
+| `grid_default_routing` | `str` | `"auto"` | Default grid routing preference |
+| `default_sovereignty_enforcement` | `str` | `"none"` | Default sovereignty mode |
+| `default_sensitivity_label` | `str \| null` | `null` | Default sensitivity label |
+| `default_retrieval_mode` | `str` | `"disabled"` | Default retrieval mode |
+| `default_execution_mode` | `str` | `"standard"` | Default execution mode |
 
 ## Intent-to-Role Mapping
 
@@ -137,6 +150,14 @@ The routing layer maps each `RequestIntent` to an AuraRouter role:
 | `REVIEW` | `reasoning` | Requires judgment and architectural context |
 | `CHAT` | `reasoning` | Open-ended, benefits from depth |
 | `PLAN` | `reasoning` | Decomposition, frontier capability required |
+| `REFACTOR` | `coder` | Code transformation with structural awareness |
+| `REVIEW_DIFF` | `reasoning` | Diff-specific review, needs change context |
+| `SECURITY_REVIEW` | `reasoning` | Security-focused analysis |
+| `GENERATE_TESTS` | `coder` | Test generation from code context |
+| `CROSS_FILE_EDIT` | `coder` | Multi-file coordinated modification |
+| `ARCHITECTURE_TRACE` | `reasoning` | Cross-system architecture analysis |
+
+Each intent also maps to a **capability profile** via `INTENT_CAPABILITY_MAP` in `intent_map.py`, specifying which backend features (e.g., `diff_aware`, `cross_file`, `security_analysis`) the intent benefits from.
 
 ### Adapter-Specific Intent Mappings
 

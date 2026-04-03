@@ -9,10 +9,16 @@ from typing import Any
 import structlog
 
 from auracode.models.context import SessionContext
-from auracode.models.request import RequestIntent
+from auracode.models.request import (
+    DegradationNotice,
+    ExecutionMode,
+    RequestIntent,
+    RoutingPreference,
+)
 from auracode.routing.artifacts import execute_modifications, parse_artifact_payload
 from auracode.routing.base import (
     AnalyzerInfo,
+    BackendCapability,
     BaseRouterBackend,
     ModelInfo,
     RouteResult,
@@ -21,12 +27,18 @@ from auracode.routing.base import (
 from auracode.routing.intent_map import (
     build_context_prompt,
     build_file_constraints,
+    map_intent_to_capabilities,
     map_intent_to_role,
 )
 
 log = structlog.get_logger()
 
-ACTIONABLE_INTENTS = {RequestIntent.EDIT_CODE, RequestIntent.GENERATE_CODE}
+ACTIONABLE_INTENTS = {
+    RequestIntent.EDIT_CODE,
+    RequestIntent.GENERATE_CODE,
+    RequestIntent.REFACTOR,
+    RequestIntent.CROSS_FILE_EDIT,
+}
 
 
 class EmbeddedRouterBackend(BaseRouterBackend):
@@ -66,16 +78,101 @@ class EmbeddedRouterBackend(BaseRouterBackend):
     ) -> dict[str, Any]:
         """Build the routing options payload.
 
+        Serializes typed execution policy, intent semantics, capability
+        requests, and context hints into a stable backend payload.
         Caller-provided options take precedence on key collision.
         """
         opts: dict[str, Any] = {
             "intent": intent.value,
             "routing_hints": self._extract_languages(context),
             "file_constraints": build_file_constraints(context),
+            "requested_capabilities": map_intent_to_capabilities(intent),
         }
+
+        # Inject typed policy if present in caller options (set by engine).
+        if caller_options and "_execution_policy" in caller_options:
+            opts["execution_policy"] = caller_options["_execution_policy"]
+
         if caller_options:
             opts.update(caller_options)
         return opts
+
+    def _check_capability_support(
+        self,
+        requested_mode: ExecutionMode,
+        requested_routing: RoutingPreference,
+        policy_dict: dict | None = None,
+    ) -> list[DegradationNotice]:
+        """Check if the configured fabric supports the requested capabilities.
+
+        Returns a list of degradation notices for unsupported features.
+        """
+        degradations: list[DegradationNotice] = []
+
+        # The embedded backend always runs locally.
+        if requested_routing in (
+            RoutingPreference.REQUIRE_GRID,
+            RoutingPreference.REQUIRE_VERIFIED,
+        ):
+            degradations.append(
+                DegradationNotice(
+                    capability="routing",
+                    requested=requested_routing.value,
+                    actual=RoutingPreference.PREFER_LOCAL.value,
+                    reason=(
+                        "Embedded backend executes locally; grid/verified routing not available."
+                    ),
+                )
+            )
+
+        # Check if fabric supports streaming for speculative mode.
+        if requested_mode == ExecutionMode.SPECULATIVE:
+            if not hasattr(self._fabric, "execute_speculative"):
+                degradations.append(
+                    DegradationNotice(
+                        capability="execution_mode",
+                        requested="speculative",
+                        actual="standard",
+                        reason="Fabric does not support speculative execution.",
+                    )
+                )
+
+        if requested_mode == ExecutionMode.MONOLOGUE:
+            if not hasattr(self._fabric, "execute_monologue"):
+                degradations.append(
+                    DegradationNotice(
+                        capability="execution_mode",
+                        requested="monologue",
+                        actual="standard",
+                        reason="Fabric does not support monologue execution.",
+                    )
+                )
+
+        # Sovereignty enforcement: if enforce + no cloud allowed, flag if
+        # the fabric uses cloud providers.
+        if policy_dict:
+            sov = policy_dict.get("sovereignty", {})
+            enforcement = sov.get("enforcement", "none")
+            allow_cloud = sov.get("allow_cloud", True)
+            if enforcement == "enforce" and not allow_cloud:
+                # Embedded backend is local — this is satisfied.
+                pass  # Local execution complies with no-cloud policy.
+
+            # Retrieval enforcement
+            ret = policy_dict.get("retrieval", {})
+            ret_mode = ret.get("mode", "disabled")
+            if ret_mode == "required":
+                # Embedded backend doesn't have native RAG — degrade.
+                degradations.append(
+                    DegradationNotice(
+                        capability="retrieval",
+                        requested="required",
+                        actual="disabled",
+                        reason="Embedded backend does not support retrieval augmentation.",
+                    )
+                )
+
+        return degradations
 
     @staticmethod
     def _routing_hints_prefix(route_options: dict[str, Any]) -> str:
@@ -108,6 +205,30 @@ class EmbeddedRouterBackend(BaseRouterBackend):
         route_options = self._build_route_options(intent, context, options)
         self._last_route_options = route_options
 
+        # Capability negotiation: check requested mode/routing against fabric.
+        policy_dict = (
+            route_options.get("execution_policy") or route_options.get("_execution_policy") or {}
+        )
+        requested_mode = (
+            ExecutionMode(policy_dict.get("mode", "standard"))
+            if policy_dict
+            else ExecutionMode.STANDARD
+        )
+        requested_routing = (
+            RoutingPreference(policy_dict.get("routing", "auto"))
+            if policy_dict
+            else RoutingPreference.AUTO
+        )
+        degradations = self._check_capability_support(
+            requested_mode, requested_routing, policy_dict
+        )
+
+        if degradations:
+            log.info(
+                "embedded.capability_degradation",
+                degradations=[d.model_dump() for d in degradations],
+            )
+
         context_prefix = build_context_prompt(context)
         hints_prefix = self._routing_hints_prefix(route_options)
         full_prompt = hints_prefix + context_prefix + prompt
@@ -133,6 +254,8 @@ class EmbeddedRouterBackend(BaseRouterBackend):
         route_result = RouteResult(
             content=result_text,
             model_used=model_used,
+            metadata={"analyzer_used": self._get_active_analyzer_id()},
+            degradations=degradations,
         )
 
         # --- Artifact execution for actionable intents ----------------
@@ -168,6 +291,7 @@ class EmbeddedRouterBackend(BaseRouterBackend):
                         ],
                         "execution_trace": full_trace,
                     },
+                    degradations=route_result.degradations,
                 )
 
         return route_result
@@ -195,6 +319,32 @@ class EmbeddedRouterBackend(BaseRouterBackend):
             )
         except Exception:
             return False
+
+    def _get_active_analyzer_id(self) -> str | None:
+        """Return the active analyzer ID from the config loader, or None."""
+        try:
+            return self._config_loader.get_active_analyzer()
+        except Exception:
+            return None
+
+    async def get_capabilities(self) -> list[BackendCapability]:
+        """Return capabilities supported by the embedded fabric."""
+        caps = [
+            BackendCapability(capability_id="code_generation", supported=True),
+            BackendCapability(capability_id="reasoning", supported=True),
+            BackendCapability(
+                capability_id="streaming", supported=hasattr(self._fabric, "execute_stream")
+            ),
+            BackendCapability(
+                capability_id="speculative", supported=hasattr(self._fabric, "execute_speculative")
+            ),
+            BackendCapability(
+                capability_id="monologue", supported=hasattr(self._fabric, "execute_monologue")
+            ),
+            BackendCapability(capability_id="local_execution", supported=True),
+            BackendCapability(capability_id="grid_execution", supported=False),
+        ]
+        return caps
 
     # ------------------------------------------------------------------ #
     # Streaming

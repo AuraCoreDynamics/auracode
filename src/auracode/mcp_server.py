@@ -18,26 +18,85 @@ def create_mcp_server(engine: Any) -> Any | None:
 
     server = FastMCP("auracode")
 
-    @server.tool()
-    async def auracode_generate(
+    def _build_request(
         prompt: str,
-        intent: str = "generate_code",
-        context_dir: str | None = None,
-    ) -> str:
-        """Generate code using AuraCode's engine."""
-        from auracode.models.request import EngineRequest, RequestIntent
+        intent: str,
+        adapter: str = "mcp",
+        execution_mode: str = "standard",
+        routing_preference: str = "auto",
+        sovereignty_enforcement: str = "none",
+        retrieval_mode: str = "disabled",
+        context_session: Any = None,
+    ):
+        """Build an EngineRequest with typed execution policy."""
+        from auracode.models.request import (
+            EngineRequest,
+            ExecutionMode,
+            ExecutionPolicy,
+            LatencyBudget,
+            RequestIntent,
+            RetrievalMode,
+            RetrievalPolicy,
+            RoutingPreference,
+            SovereigntyEnforcement,
+            SovereigntyPolicy,
+        )
 
-        # Map string intent to enum, default to GENERATE_CODE
         try:
             req_intent = RequestIntent(intent)
         except ValueError:
             req_intent = RequestIntent.GENERATE_CODE
 
-        req = EngineRequest(
+        try:
+            mode = ExecutionMode(execution_mode)
+        except ValueError:
+            mode = ExecutionMode.STANDARD
+
+        try:
+            routing = RoutingPreference(routing_preference)
+        except ValueError:
+            routing = RoutingPreference.AUTO
+
+        try:
+            sov = SovereigntyEnforcement(sovereignty_enforcement)
+        except ValueError:
+            sov = SovereigntyEnforcement.NONE
+
+        try:
+            ret = RetrievalMode(retrieval_mode)
+        except ValueError:
+            ret = RetrievalMode.DISABLED
+
+        policy = ExecutionPolicy(
+            mode=mode,
+            routing=routing,
+            sovereignty=SovereigntyPolicy(enforcement=sov),
+            retrieval=RetrievalPolicy(mode=ret),
+            latency=LatencyBudget(),
+        )
+
+        return EngineRequest(
             request_id=str(uuid.uuid4()),
             intent=req_intent,
             prompt=prompt,
-            adapter_name="mcp",
+            adapter_name=adapter,
+            execution_policy=policy,
+            context=context_session,
+        )
+
+    @server.tool()
+    async def auracode_generate(
+        prompt: str,
+        intent: str = "generate_code",
+        execution_mode: str = "standard",
+        routing_preference: str = "auto",
+    ) -> str:
+        """Generate code using AuraCode's engine."""
+        req = _build_request(
+            prompt,
+            intent,
+            execution_mode=execution_mode,
+            routing_preference=routing_preference,
         )
         resp = await engine.execute(req)
         if resp.error:
@@ -45,12 +104,74 @@ def create_mcp_server(engine: Any) -> Any | None:
         return resp.content
 
     @server.tool()
+    async def auracode_plan(
+        prompt: str,
+        execution_mode: str = "standard",
+    ) -> str:
+        """Plan an architecture or implementation approach."""
+        req = _build_request(prompt, "plan", execution_mode=execution_mode)
+        resp = await engine.execute(req)
+        if resp.error:
+            return f"Error: {resp.error}"
+        return resp.content
+
+    @server.tool()
+    async def auracode_refactor(
+        prompt: str,
+        execution_mode: str = "standard",
+    ) -> str:
+        """Refactor code according to the given instructions."""
+        req = _build_request(prompt, "refactor", execution_mode=execution_mode)
+        resp = await engine.execute(req)
+        if resp.error:
+            return f"Error: {resp.error}"
+        return resp.content
+
+    @server.tool()
+    async def auracode_review_diff(
+        prompt: str,
+        sovereignty_enforcement: str = "none",
+    ) -> str:
+        """Review a code diff for correctness and security."""
+        req = _build_request(
+            prompt,
+            "review_diff",
+            sovereignty_enforcement=sovereignty_enforcement,
+        )
+        resp = await engine.execute(req)
+        if resp.error:
+            return f"Error: {resp.error}"
+        return resp.content
+
+    @server.tool()
+    async def auracode_security_review(
+        prompt: str,
+        sovereignty_enforcement: str = "warn",
+    ) -> str:
+        """Security-focused code review."""
+        req = _build_request(
+            prompt,
+            "security_review",
+            sovereignty_enforcement=sovereignty_enforcement,
+        )
+        resp = await engine.execute(req)
+        if resp.error:
+            return f"Error: {resp.error}"
+        return resp.content
+
+    @server.tool()
+    async def auracode_trace() -> str:
+        """Return the last execution trace metadata."""
+        # The engine doesn't store last response globally, so return
+        # what the MCP server can observe.
+        return "Use /trace in the REPL for execution trace. MCP trace support pending."
+
+    @server.tool()
     async def auracode_explain(file_path: str) -> str:
         """Explain a file's contents."""
         from pathlib import Path
 
         from auracode.models.context import FileContext, SessionContext
-        from auracode.models.request import EngineRequest, RequestIntent
 
         content: str | None = None
         p = Path(file_path)
@@ -70,12 +191,10 @@ def create_mcp_server(engine: Any) -> Any | None:
             working_directory=str(p.parent),
             files=[file_ctx],
         )
-        req = EngineRequest(
-            request_id=str(uuid.uuid4()),
-            intent=RequestIntent.EXPLAIN_CODE,
-            prompt=f"Explain the contents of {file_path}",
-            context=session,
-            adapter_name="mcp",
+        req = _build_request(
+            f"Explain the contents of {file_path}",
+            "explain_code",
+            context_session=session,
         )
         resp = await engine.execute(req)
         if resp.error:
@@ -88,7 +207,6 @@ def create_mcp_server(engine: Any) -> Any | None:
         from pathlib import Path
 
         from auracode.models.context import FileContext, SessionContext
-        from auracode.models.request import EngineRequest, RequestIntent
 
         content: str | None = None
         p = Path(file_path)
@@ -108,12 +226,10 @@ def create_mcp_server(engine: Any) -> Any | None:
             working_directory=str(p.parent),
             files=[file_ctx],
         )
-        req = EngineRequest(
-            request_id=str(uuid.uuid4()),
-            intent=RequestIntent.REVIEW,
-            prompt=f"Review the code in {file_path}",
-            context=session,
-            adapter_name="mcp",
+        req = _build_request(
+            f"Review the code in {file_path}",
+            "review",
+            context_session=session,
         )
         resp = await engine.execute(req)
         if resp.error:

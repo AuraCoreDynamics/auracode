@@ -41,7 +41,7 @@ class TestRouteFailover:
         assert len(unhealthy_primary.route_calls) == 0
         assert len(healthy_fallback.route_calls) == 1
 
-    async def test_over_threshold_uses_fallback_directly(
+    async def test_over_threshold_uses_primary_first(
         self, healthy_primary: MockBackend, healthy_fallback: MockBackend
     ) -> None:
         fo = FailoverBackend(healthy_primary, healthy_fallback, context_threshold=10)
@@ -49,10 +49,10 @@ class TestRouteFailover:
         big_prompt = "x" * 200
         result = await fo.route(big_prompt, RequestIntent.CHAT)
 
-        assert result.content == "fallback answer"
-        # Primary should not even be health-checked.
-        assert healthy_primary.health_calls == 0
-        assert len(healthy_primary.route_calls) == 0
+        # FIXED: Over-threshold now prefers primary (grid) since large
+        # requests benefit from distributed compute.
+        assert result.content == "primary answer"
+        assert len(healthy_primary.route_calls) == 1
 
     async def test_context_size_counted(
         self, healthy_primary: MockBackend, healthy_fallback: MockBackend
@@ -65,7 +65,8 @@ class TestRouteFailover:
         )
         result = await fo.route("hi", RequestIntent.CHAT, context=ctx)
 
-        assert result.content == "fallback answer"
+        # FIXED: Over-threshold prefers primary (grid).
+        assert result.content == "primary answer"
 
     async def test_health_check_error_falls_back(self, healthy_fallback: MockBackend) -> None:
         primary = MockBackend(health_error=ConnectionError("timeout"))
