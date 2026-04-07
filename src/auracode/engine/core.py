@@ -15,6 +15,7 @@ from auracode.models.request import (
     EngineRequest,
     EngineResponse,
     ExecutionMetadata,
+    ExecutionMode,
 )
 from auracode.routing.base import BaseRouterBackend
 
@@ -61,6 +62,23 @@ class AuraCodeEngine:
 
             route_options = dict(request.options or {})
             route_options["_execution_policy"] = effective_policy.model_dump()
+            # Pass local permissions to router (Task 2.2)
+            route_options["permissions"] = self.config.permissions.model_dump()
+
+            # --- Agentic Loop (Task 3.1) ---
+            if effective_policy.mode == ExecutionMode.MONOLOGUE:
+                # Monologue mode is handled as a single (but long) call
+                # to aurarouter's monologue orchestrator
+                pass
+
+            # If we wanted a local agentic loop in auracode, we'd implement it here.
+            # For now, we delegate the reasoning loop to aurarouter but we could
+            # add a multi-turn loop here if the model returns tool calls that
+            # aurarouter doesn't handle.
+
+            # Clear journal before execution
+            if hasattr(self, "_journal"):
+                self._journal.entries.clear()
 
             route_result = await self.router.route(
                 prompt=request.prompt,
@@ -68,6 +86,11 @@ class AuraCodeEngine:
                 context=session,
                 options=route_options,
             )
+
+            # Collect journal (Task 2.3)
+            journal_entries = []
+            if hasattr(self, "_journal"):
+                journal_entries = self._journal.to_dict()
 
             # Build execution metadata from backend result.
             exec_meta = self._extract_execution_metadata(route_result)
@@ -86,9 +109,10 @@ class AuraCodeEngine:
                 content="",
                 error=str(exc),
             )
+            journal_entries = []
 
         # Update session history
-        self.session_manager.update(session.session_id, request, response)
+        self.session_manager.update(session.session_id, request, response, journal=journal_entries)
         return response
 
     async def execute_stream(self, request: EngineRequest) -> AsyncIterator[str]:
@@ -123,6 +147,12 @@ class AuraCodeEngine:
 
             route_options = dict(request.options or {})
             route_options["_execution_policy"] = effective_policy.model_dump()
+            # Pass local permissions to router (Task 2.2)
+            route_options["permissions"] = self.config.permissions.model_dump()
+
+            # Clear journal before execution
+            if hasattr(self, "_journal"):
+                self._journal.entries.clear()
 
             async for chunk in self.router.route_stream(
                 prompt=request.prompt,
@@ -135,6 +165,11 @@ class AuraCodeEngine:
         except Exception as exc:
             log.error("engine.execute_stream.failed", request_id=request.request_id, error=str(exc))
             raise
+
+        # Collect journal (Task 2.3)
+        journal_entries = []
+        if hasattr(self, "_journal"):
+            journal_entries = self._journal.to_dict()
 
         # Update session history with the complete response.
         full_content = "".join(collected)
@@ -150,7 +185,7 @@ class AuraCodeEngine:
             content=full_content,
             execution_metadata=exec_meta,
         )
-        self.session_manager.update(session.session_id, request, response)
+        self.session_manager.update(session.session_id, request, response, journal=journal_entries)
 
     def get_session(self, session_id: str) -> SessionContext | None:
         """Retrieve a session by ID."""
@@ -159,6 +194,19 @@ class AuraCodeEngine:
     def close_session(self, session_id: str) -> None:
         """Close and discard a session."""
         self.session_manager.close(session_id)
+
+    async def get_budget_status(self) -> dict:
+        """Return the current budget status from the router."""
+        try:
+            # This requires an MCP tool or direct call if embedded
+            if hasattr(self.router, "get_budget_status"):
+                return await self.router.get_budget_status()
+
+            # Fallback for MCP-based routers: call a tool if it exists
+            # (Pending: add aurarouter.budget.status MCP tool)
+            return {"error": "Budget status not supported by current router"}
+        except Exception as e:
+            return {"error": str(e)}
 
     @staticmethod
     def _extract_execution_metadata(route_result) -> ExecutionMetadata | None:

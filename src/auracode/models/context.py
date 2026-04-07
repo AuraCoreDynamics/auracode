@@ -28,6 +28,7 @@ class SessionContext(BaseModel):
     files: list[FileContext] = []
     history: list[dict[str, str]] = []
     metadata: dict[str, Any] = {}
+    journal: list[dict[str, Any]] = []
     # Context semantics for sovereignty/retrieval-aware routing (TG2/TG7).
     project_id: str | None = None
     sensitivity_label: str | None = None

@@ -244,4 +244,87 @@ def create_mcp_server(engine: Any) -> Any | None:
             return "No models available"
         return "\n".join(f"{m.model_id} ({m.provider})" for m in models)
 
+    @server.tool()
+    async def auracode_write_file(path: str, content: str) -> str:
+        """Write a file to the local filesystem. Requires allow_file_write permission."""
+        from pathlib import Path
+
+        from auracode.utils.journal import FileJournal
+
+        if not engine.config.permissions.allow_file_write:
+            return "Error: File write permission denied. Restart with --allow-write."
+
+        p = Path(path)
+        before_content = None
+        if p.exists():
+            before_content = p.read_text(encoding="utf-8", errors="replace")
+
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding="utf-8")
+
+            # Record in journal (Task 2.3)
+            if not hasattr(engine, "_journal"):
+                engine._journal = FileJournal()
+            engine._journal.record(path, "write", before_content, content)
+
+            return f"Successfully wrote to {path}"
+        except Exception as e:
+            return f"Error writing file: {e}"
+
+    @server.tool()
+    async def auracode_edit_file(path: str, old_text: str, new_text: str) -> str:
+        """Edit a file by replacing old_text with new_text. Requires allow_file_write."""
+        from pathlib import Path
+
+        from auracode.utils.journal import FileJournal
+
+        if not engine.config.permissions.allow_file_write:
+            return "Error: File write permission denied. Restart with --allow-write."
+
+        p = Path(path)
+        if not p.is_file():
+            return f"Error: {path} is not a file."
+
+        content = p.read_text(encoding="utf-8", errors="replace")
+        if old_text not in content:
+            return f"Error: old_text not found in {path}"
+
+        new_content = content.replace(old_text, new_text)
+        try:
+            p.write_text(new_content, encoding="utf-8")
+
+            # Record in journal (Task 2.3)
+            if not hasattr(engine, "_journal"):
+                engine._journal = FileJournal()
+            engine._journal.record(
+                path, "edit", content, new_content, {"old_text": old_text, "new_text": new_text}
+            )
+
+            return f"Successfully edited {path}"
+        except Exception as e:
+            return f"Error editing file: {e}"
+
+    @server.tool()
+    async def auracode_bash(command: str) -> str:
+        """Execute a bash command. Requires allow_shell_commands."""
+        import re
+        import subprocess
+
+        if not engine.config.permissions.allow_shell_commands:
+            return "Error: Shell command permission denied. Restart with --allow-shell."
+
+        if not engine.config.permissions.allow_destructive_shell_commands:
+            destructive_patterns = [r"rm\s", r"mv\s", r"git\s+reset", r"git\s+clean"]
+            if any(re.search(p, command) for p in destructive_patterns):
+                return "Error: Destructive command blocked. Restart with --unsafe to allow."
+
+        try:
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=60)
+            return (
+                f"Exit code: {result.returncode}\nStdout: {result.stdout}\nStderr: {result.stderr}"
+            )
+        except Exception as e:
+            return f"Error executing command: {e}"
+
     return server

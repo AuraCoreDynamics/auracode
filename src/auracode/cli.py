@@ -23,11 +23,27 @@ class _DefaultGroup(click.Group):
 @click.group(cls=_DefaultGroup)
 @click.version_option(package_name="auracode")
 @click.option("--config", type=click.Path(), default=None, help="Path to auracode.yaml")
+@click.option("--allow-write", is_flag=True, default=False, help="Allow agent to write files.")
+@click.option(
+    "--allow-shell", is_flag=True, default=False, help="Allow agent to execute shell commands."
+)
+@click.option("--unsafe", is_flag=True, default=False, help="Allow destructive shell commands.")
 @click.pass_context
-def main(ctx: click.Context, config: str | None) -> None:
+def main(
+    ctx: click.Context,
+    config: str | None,
+    allow_write: bool,
+    allow_shell: bool,
+    unsafe: bool,
+) -> None:
     """AuraCode -- terminal-native, vendor-agnostic AI coding assistant."""
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = config
+    ctx.obj["permissions"] = {
+        "allow_file_write": allow_write,
+        "allow_shell_commands": allow_shell,
+        "allow_destructive_shell_commands": unsafe,
+    }
 
 
 @main.command()
@@ -37,7 +53,10 @@ def repl(ctx: click.Context) -> None:
     from auracode.app import create_application
     from auracode.repl.console import AuraCodeConsole
 
-    engine, adapters, _, prefs = create_application(ctx.obj.get("config_path"))
+    engine, adapters, _, prefs = create_application(
+        ctx.obj.get("config_path"),
+        permissions_override=ctx.obj.get("permissions"),
+    )
     console = AuraCodeConsole(
         engine,
         adapters,

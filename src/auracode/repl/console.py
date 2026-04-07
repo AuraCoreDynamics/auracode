@@ -267,11 +267,18 @@ class AuraCodeConsole:
                     continue
 
                 # Regular prompt — send through the engine.
-                result = await self.send_prompt(line)
-                if result:
+                exec_mode = getattr(self, "_execution_mode", "standard")
+                if exec_mode == "monologue":
+                    # Streaming path for monologue
                     self.rich.print()
-                    self._print_output(result)
+                    await self.stream_prompt(line)
                     self.rich.print()
+                else:
+                    result = await self.send_prompt(line)
+                    if result:
+                        self.rich.print()
+                        self._print_output(result)
+                        self.rich.print()
 
             except KeyboardInterrupt:
                 self.rich.print("\n[info]Interrupted. Type /quit to exit.[/info]")
@@ -281,6 +288,51 @@ class AuraCodeConsole:
                 continue
 
         self.rich.print("[info]Goodbye.[/info]")
+
+    async def stream_prompt(self, text: str) -> None:
+        """Send a prompt and stream the response to the console."""
+        if self.active_adapter is None:
+            self.rich.print("[error]No adapter active.[/error]")
+            return
+
+        intent = self._detect_intent(text)
+        context = self._build_session_context()
+
+        # Build execution policy
+        exec_mode = getattr(self, "_execution_mode", "standard")
+        sov_enforcement = getattr(self, "_sovereignty_enforcement", "none")
+        routing_pref = getattr(self, "_routing_preference", "auto")
+
+        policy = ExecutionPolicy(
+            mode=ExecutionMode(exec_mode),
+            routing=RoutingPreference(routing_pref),
+            sovereignty=SovereigntyPolicy(enforcement=SovereigntyEnforcement(sov_enforcement)),
+            retrieval=RetrievalPolicy(mode=RetrievalMode.DISABLED),
+            latency=LatencyBudget(),
+        )
+
+        request = EngineRequest(
+            request_id=str(uuid.uuid4()),
+            intent=intent,
+            prompt=text,
+            context=context,
+            adapter_name=self.active_adapter.name,
+            execution_policy=policy,
+        )
+
+        collected = []
+        async for chunk in self.engine.execute_stream(request):
+            # Task 3.3: render exploratory tool calls
+            if chunk.startswith("[MONOLOGUE"):
+                self.rich.print(f"[info]{chunk.strip()}[/info]")
+            else:
+                self.rich.print(chunk, end="")
+                collected.append(chunk)
+
+        full_content = "".join(collected)
+        if full_content:
+            self.session_history.append({"role": "user", "content": text})
+            self.session_history.append({"role": "assistant", "content": full_content})
 
     def run_sync(self) -> None:
         """Synchronous wrapper for run()."""

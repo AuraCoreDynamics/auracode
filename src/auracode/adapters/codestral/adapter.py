@@ -63,15 +63,20 @@ class CodestralAdapter(BaseAdapter):
                 )
             )
 
+        options: dict[str, Any] = raw_input.get("options", {})
+        working_dir = str(Path.cwd())
+        project_id: str = Path(working_dir).name or "unknown"
+        sensitivity_label: str = options.get("sensitivity_label", "unclassified")
+
         session_context: SessionContext | None = None
         if file_contexts:
             session_context = SessionContext(
                 session_id=str(uuid.uuid4()),
-                working_directory=str(Path.cwd()),
+                working_directory=working_dir,
                 files=file_contexts,
+                project_id=project_id,
+                sensitivity_label=sensitivity_label,
             )
-
-        options: dict[str, Any] = raw_input.get("options", {})
 
         return EngineRequest(
             request_id=str(uuid.uuid4()),

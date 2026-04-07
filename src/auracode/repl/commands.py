@@ -449,6 +449,57 @@ async def _handle_capabilities(console: AuraCodeConsole, args: str) -> str | Non
     return "\n".join(lines)
 
 
+async def _handle_spend(console: AuraCodeConsole, args: str) -> str | None:
+    """Show current budget spend and limits."""
+    status = await console.engine.get_budget_status()
+    if "error" in status:
+        return f"Error retrieving budget: {status['error']}"
+
+    lines = ["", "Agentic Spend / Budget Status:"]
+    enabled = "Enabled" if status.get("enabled") else "Disabled"
+    lines.append(f"  Status: {enabled}")
+
+    daily_spend = status.get("daily_spend", 0.0)
+    daily_limit = status.get("daily_limit")
+    limit_str = f" / ${daily_limit:.2f}" if daily_limit is not None else ""
+    lines.append(f"  Daily: ${daily_spend:.2f}{limit_str}")
+
+    monthly_spend = status.get("monthly_spend", 0.0)
+    monthly_limit = status.get("monthly_limit")
+    mlimit_str = f" / ${monthly_limit:.2f}" if monthly_limit is not None else ""
+    lines.append(f"  Monthly: ${monthly_spend:.2f}{mlimit_str}")
+
+    return "\n".join(lines)
+
+
+async def _handle_permissions(console: AuraCodeConsole, args: str) -> str | None:
+    """View or set local execution permissions."""
+    parts = args.strip().split()
+    if not parts:
+        perms = console.engine.config.permissions
+        lines = ["", "Local Agent Permissions:"]
+        lines.append(f"  allow_file_write: {perms.allow_file_write}")
+        lines.append(f"  allow_shell_commands: {perms.allow_shell_commands}")
+        lines.append(
+            f"  allow_destructive_shell_commands (unsafe): {perms.allow_destructive_shell_commands}"
+        )
+        lines.append("")
+        lines.append("Toggle with: /permissions <name> <on|off>")
+        return "\n".join(lines)
+
+    if len(parts) < 2:
+        return "Usage: /permissions <name> <on|off>"
+
+    name, val = parts[0], parts[1].lower()
+    enabled = val in ("on", "true", "yes")
+
+    if hasattr(console.engine.config.permissions, name):
+        setattr(console.engine.config.permissions, name, enabled)
+        return f"Permission '{name}' set to {enabled}."
+    else:
+        return f"Unknown permission: {name}"
+
+
 def register_builtin_commands() -> None:
     """Register all built-in slash commands."""
     _COMMANDS.clear()
@@ -489,5 +540,9 @@ def register_builtin_commands() -> None:
     register(SlashCommand("trace", "Show last execution trace", _handle_trace))
     register(
         SlashCommand("capabilities", "Show backend capabilities", _handle_capabilities, ["caps"])
+    )
+    register(SlashCommand("spend", "Show agentic spend and budget limits", _handle_spend))
+    register(
+        SlashCommand("permissions", "View or set local permissions", _handle_permissions, ["perms"])
     )
     register(SlashCommand("quit", "Exit AuraCode", _handle_quit, ["q", "exit"]))

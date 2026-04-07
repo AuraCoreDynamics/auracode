@@ -211,7 +211,11 @@ class TestMcpServerIntegration:
             assert "auracode_refactor" in registered_tools
             assert "auracode_review_diff" in registered_tools
             assert "auracode_security_review" in registered_tools
-            assert len(registered_tools) == 9
+            assert "auracode_trace" in registered_tools
+            assert "auracode_write_file" in registered_tools
+            assert "auracode_edit_file" in registered_tools
+            assert "auracode_bash" in registered_tools
+            assert len(registered_tools) == 12
         finally:
             if saved is not None:
                 sys.modules["mcp"] = saved

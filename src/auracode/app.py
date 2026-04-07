@@ -73,12 +73,18 @@ def load_config(config_path: str | None = None) -> AuraCodeConfig:
 
 def create_application(
     config_path: str | None = None,
+    permissions_override: dict[str, bool] | None = None,
 ) -> tuple[AuraCodeEngine, AdapterRegistry, BackendRegistry, PreferencesManager]:
     """Bootstrap the full AuraCode application.
 
     Returns a tuple of ``(engine, adapter_registry, backend_registry, preferences_manager)``.
     """
     config = load_config(config_path)
+    if permissions_override:
+        for k, v in permissions_override.items():
+            if hasattr(config.permissions, k):
+                setattr(config.permissions, k, v)
+
     _safe_configure_logging(config.log_level)
 
     # Load user preferences and let them override config defaults
@@ -111,6 +117,7 @@ def create_application(
                 tls_cert=config.grid_tls_cert,
                 tls_key=config.grid_tls_key,
                 ca_cert=config.grid_ca_cert,
+                server_name=config.grid_server_name,
             )
             if embedded_backend:
                 default_backend = FailoverBackend(

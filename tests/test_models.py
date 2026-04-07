@@ -136,6 +136,43 @@ class TestAuraCodeConfig:
         cfg = AuraCodeConfig(log_level="DEBUG", grid_endpoint="http://grid:5000")
         assert cfg.log_level == "DEBUG"
 
+    def test_pki_paths_valid_files(self, tmp_path) -> None:
+        """AuraCodeConfig accepts PKI fields when paths exist on disk."""
+        ca = tmp_path / "ca.pem"
+        cert = tmp_path / "cert.pem"
+        key = tmp_path / "key.pem"
+        ca.write_bytes(b"CA")
+        cert.write_bytes(b"CERT")
+        key.write_bytes(b"KEY")
+        cfg = AuraCodeConfig(
+            grid_ca_cert=str(ca),
+            grid_tls_cert=str(cert),
+            grid_tls_key=str(key),
+        )
+        assert cfg.grid_ca_cert == str(ca)
+        assert cfg.grid_tls_cert == str(cert)
+        assert cfg.grid_tls_key == str(key)
+
+    def test_pki_ca_cert_missing_raises(self) -> None:
+        """Nonexistent grid_ca_cert path raises ValidationError at construction time."""
+        with pytest.raises(ValidationError, match="grid_ca_cert"):
+            AuraCodeConfig(grid_ca_cert="/nonexistent/ca.pem")
+
+    def test_pki_tls_cert_missing_raises(self) -> None:
+        """Nonexistent grid_tls_cert path raises ValidationError at construction time."""
+        with pytest.raises(ValidationError, match="grid_tls_cert"):
+            AuraCodeConfig(grid_tls_cert="/nonexistent/cert.pem")
+
+    def test_pki_tls_key_missing_raises(self) -> None:
+        """Nonexistent grid_tls_key path raises ValidationError at construction time."""
+        with pytest.raises(ValidationError, match="grid_tls_key"):
+            AuraCodeConfig(grid_tls_key="/nonexistent/key.pem")
+
+    def test_pki_server_name_no_path_check(self) -> None:
+        """grid_server_name is a string override, not a path — no file-existence check."""
+        cfg = AuraCodeConfig(grid_server_name="grid.internal.example.com")
+        assert cfg.grid_server_name == "grid.internal.example.com"
+
 
 # ---------------------------------------------------------------------------
 # Serialization round-trip

@@ -55,12 +55,14 @@ class GridDelegateBackend(BaseRouterBackend):
         tls_cert: str | None = None,
         tls_key: str | None = None,
         ca_cert: str | None = None,
+        server_name: str | None = None,
     ) -> None:
         self._endpoint = endpoint
         self._timeout = timeout
         self._tls_cert = tls_cert
         self._tls_key = tls_key
         self._ca_cert = ca_cert
+        self._server_name = server_name
         self._channel: Any = None
         self._stub: Any = None
 
@@ -87,21 +89,60 @@ class GridDelegateBackend(BaseRouterBackend):
                 "Install it with: pip install auracode[grid]"
             ) from exc
 
-        if self._tls_cert and self._tls_key:
-            with open(self._tls_cert, "rb") as f:
-                cert = f.read()
-            with open(self._tls_key, "rb") as f:
-                key = f.read()
-            ca = None
+        if self._ca_cert or (self._tls_cert and self._tls_key):
+            # Load CA certificate for server verification (custom CA or system default)
+            root_certificates: bytes | None = None
             if self._ca_cert:
-                with open(self._ca_cert, "rb") as f:
-                    ca = f.read()
+                try:
+                    with open(self._ca_cert, "rb") as f:
+                        root_certificates = f.read()
+                except OSError as exc:
+                    from auracode.errors import AuraError
+
+                    raise GridConnectionError(
+                        AuraError(
+                            error_code=4010,
+                            category="auth",
+                            message="Failed to load grid CA certificate",
+                            detail=str(exc),
+                            source_project="auracode",
+                        ).model_dump_json()
+                    ) from exc
+
+            # Load client cert + key for mTLS when both are provided
+            private_key: bytes | None = None
+            certificate_chain: bytes | None = None
+            if self._tls_cert and self._tls_key:
+                try:
+                    with open(self._tls_cert, "rb") as f:
+                        certificate_chain = f.read()
+                    with open(self._tls_key, "rb") as f:
+                        private_key = f.read()
+                except OSError as exc:
+                    from auracode.errors import AuraError
+
+                    raise GridConnectionError(
+                        AuraError(
+                            error_code=4010,
+                            category="auth",
+                            message="Failed to load grid client certificate or key",
+                            detail=str(exc),
+                            source_project="auracode",
+                        ).model_dump_json()
+                    ) from exc
+
             creds = grpc.ssl_channel_credentials(
-                root_certificates=ca,
-                private_key=key,
-                certificate_chain=cert,
+                root_certificates=root_certificates,
+                private_key=private_key,
+                certificate_chain=certificate_chain,
             )
-            self._channel = grpc.aio.secure_channel(self._endpoint, creds)
+            options: list[tuple[str, str]] = []
+            if self._server_name:
+                options.append(("grpc.ssl_target_name_override", self._server_name))
+            if options:
+                self._channel = grpc.aio.secure_channel(self._endpoint, creds, options=options)
+            else:
+                self._channel = grpc.aio.secure_channel(self._endpoint, creds)
         else:
             self._channel = grpc.aio.insecure_channel(self._endpoint)
 

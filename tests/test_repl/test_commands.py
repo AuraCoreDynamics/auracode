@@ -57,6 +57,8 @@ class TestCommandRegistry:
             "retrieval",
             "trace",
             "capabilities",
+            "permissions",
+            "spend",
         }
         actual = {c.name for c in all_commands()}
         assert expected == actual

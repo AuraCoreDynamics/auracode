@@ -212,3 +212,102 @@ class TestTlsAndTimeout:
 
         fake_grpc_aio.insecure_channel.assert_called_once_with("localhost:50051")
         assert backend._channel is not None
+
+    def test_ensure_channel_ca_only_creates_secure_channel(self, tmp_path) -> None:
+        """CA cert alone (no client cert) must create a secure channel, not insecure."""
+        ca_file = tmp_path / "ca.pem"
+        ca_file.write_bytes(b"CA_DATA")
+
+        backend = GridDelegateBackend(endpoint="grid:443", ca_cert=str(ca_file))
+
+        fake_grpc = MagicMock()
+        fake_grpc_aio = MagicMock()
+        fake_creds = MagicMock()
+        fake_grpc.ssl_channel_credentials.return_value = fake_creds
+        fake_grpc.aio = fake_grpc_aio
+
+        with patch.dict("sys.modules", {"grpc": fake_grpc, "grpc.aio": fake_grpc_aio}):
+            backend._ensure_channel()
+
+        fake_grpc.ssl_channel_credentials.assert_called_once_with(
+            root_certificates=b"CA_DATA",
+            private_key=None,
+            certificate_chain=None,
+        )
+        fake_grpc_aio.secure_channel.assert_called_once_with("grid:443", fake_creds)
+        fake_grpc_aio.insecure_channel.assert_not_called()
+
+    def test_ensure_channel_server_name_override(self, tmp_path) -> None:
+        """server_name is passed as grpc.ssl_target_name_override channel option."""
+        ca_file = tmp_path / "ca.pem"
+        ca_file.write_bytes(b"CA_DATA")
+
+        backend = GridDelegateBackend(
+            endpoint="grid:443",
+            ca_cert=str(ca_file),
+            server_name="grid.internal.example.com",
+        )
+
+        fake_grpc = MagicMock()
+        fake_grpc_aio = MagicMock()
+        fake_creds = MagicMock()
+        fake_grpc.ssl_channel_credentials.return_value = fake_creds
+        fake_grpc.aio = fake_grpc_aio
+
+        with patch.dict("sys.modules", {"grpc": fake_grpc, "grpc.aio": fake_grpc_aio}):
+            backend._ensure_channel()
+
+        fake_grpc_aio.secure_channel.assert_called_once_with(
+            "grid:443",
+            fake_creds,
+            options=[("grpc.ssl_target_name_override", "grid.internal.example.com")],
+        )
+
+    def test_ensure_channel_bad_ca_cert_raises_grid_connection_error(self, tmp_path) -> None:
+        """OSError on CA cert read raises GridConnectionError with AuraError(4010)."""
+        backend = GridDelegateBackend(
+            endpoint="grid:443",
+            ca_cert="/nonexistent/ca.pem",
+        )
+
+        fake_grpc = MagicMock()
+        fake_grpc_aio = MagicMock()
+        fake_grpc.aio = fake_grpc_aio
+
+        import pytest
+
+        from auracode.grid.client import GridConnectionError
+
+        with patch.dict("sys.modules", {"grpc": fake_grpc, "grpc.aio": fake_grpc_aio}):
+            with pytest.raises(GridConnectionError) as exc_info:
+                backend._ensure_channel()
+
+        assert "4010" in str(exc_info.value)
+        assert "auth" in str(exc_info.value)
+
+    def test_ensure_channel_bad_client_cert_raises_grid_connection_error(self, tmp_path) -> None:
+        """OSError on client cert/key read raises GridConnectionError with AuraError(4010)."""
+        ca_file = tmp_path / "ca.pem"
+        ca_file.write_bytes(b"CA_DATA")
+
+        backend = GridDelegateBackend(
+            endpoint="grid:443",
+            ca_cert=str(ca_file),
+            tls_cert="/nonexistent/cert.pem",
+            tls_key="/nonexistent/key.pem",
+        )
+
+        fake_grpc = MagicMock()
+        fake_grpc_aio = MagicMock()
+        fake_grpc.aio = fake_grpc_aio
+
+        import pytest
+
+        from auracode.grid.client import GridConnectionError
+
+        with patch.dict("sys.modules", {"grpc": fake_grpc, "grpc.aio": fake_grpc_aio}):
+            with pytest.raises(GridConnectionError) as exc_info:
+                backend._ensure_channel()
+
+        assert "4010" in str(exc_info.value)
+        assert "auth" in str(exc_info.value)
