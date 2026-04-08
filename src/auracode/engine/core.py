@@ -235,4 +235,5 @@ class AuraCodeEngine:
             verification_outcome=meta.get("verification_outcome"),
             degradations=degradation_notices,
             backend_warnings=meta.get("backend_warnings", []),
+            routing_context=getattr(route_result, "routing_context", None),
         )

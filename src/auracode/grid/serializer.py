@@ -45,9 +45,16 @@ def grid_response_to_route_result(response: GridResponse) -> RouteResult:
     metadata: dict[str, Any] = {}
     if hasattr(response, "metadata") and response.metadata:
         metadata = dict(response.metadata)
+
+    # Propagate routing context if the grid node returned one.
+    routing_context: dict[str, Any] | None = None
+    if hasattr(response, "routing_context") and response.routing_context:
+        routing_context = dict(response.routing_context)
+
     return RouteResult(
         content=response.content,
         model_used=response.model_used,
         usage=usage,
         metadata=metadata,
+        routing_context=routing_context,
     )

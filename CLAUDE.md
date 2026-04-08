@@ -336,3 +336,18 @@ All routing and grid tests are fully mocked — they pass without AuraRouter or 
 | `[api]` | `aiohttp>=3.9` |
 | `[grid]` | `grpcio>=1.60`, `grpcio-tools>=1.60`, `protobuf>=4.25` |
 | `[dev]` | `pytest>=8.0`, `pytest-asyncio`, `pytest-aiohttp`, `ruff`, plus `[all]` |
+
+## Code Style
+
+Enforced by **ruff** (linter + formatter). Configuration in `pyproject.toml`.
+
+- **Line length: 100 characters** (`line-length = 100`). This applies to ALL file content — source, tests, docstrings, and inline comments. ruff enforces E501 with no per-file exceptions.
+- `ruff-format` auto-wraps expressions and imports, but **does not reflow prose**. Docstrings and comments that exceed 100 chars must be wrapped manually.
+- Pre-commit hooks run `ruff check` then `ruff-format` on every commit. Both must pass.
+
+**Practical rules for test authors:**
+
+1. Keep method docstrings short, or break them to multiple lines. A single-line docstring that reads at 100+ chars must become a multi-line docstring.
+2. Long string literals in `assert` messages or function calls must be split with parenthesized continuation or assigned to a variable first.
+3. Dict comprehensions with long key lists — split the `for ... in [...]` across two lines.
+4. `pytest tests/ -x -q` runs a `test_lint.py` that invokes `ruff check` on the package; a failing lint is a failing test.

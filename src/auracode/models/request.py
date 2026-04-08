@@ -160,6 +160,7 @@ class ExecutionMetadata(BaseModel):
     verification_outcome: str | None = None
     degradations: list[DegradationNotice] = []
     backend_warnings: list[str] = []
+    routing_context: dict[str, Any] | None = None  # _aura_routing_context from AuraRouter (TG4)
 
 
 class EngineResponse(BaseModel):

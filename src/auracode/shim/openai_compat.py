@@ -56,7 +56,7 @@ def _format_chat_response(
 ) -> dict[str, Any]:
     """Build an OpenAI ChatCompletion JSON dict."""
     usage = response.usage
-    return {
+    result: dict[str, Any] = {
         "id": completion_id,
         "object": "chat.completion",
         "created": int(time.time()),
@@ -74,6 +74,13 @@ def _format_chat_response(
             "total_tokens": ((usage.prompt_tokens + usage.completion_tokens) if usage else 0),
         },
     }
+    # Surface AuraRouter routing context in a non-breaking extension field.
+    if (
+        response.execution_metadata is not None
+        and response.execution_metadata.routing_context is not None
+    ):
+        result["_aura_routing_context"] = response.execution_metadata.routing_context
+    return result
 
 
 def _format_completion_response(

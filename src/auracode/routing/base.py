@@ -70,6 +70,7 @@ class RouteResult(BaseModel):
     usage: TokenUsage | None = None
     metadata: dict[str, Any] = {}
     degradations: list[Any] = []
+    routing_context: dict[str, Any] | None = None  # _aura_routing_context from TG4
 
 
 class BaseRouterBackend(ABC):

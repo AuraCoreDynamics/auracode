@@ -251,11 +251,38 @@ class EmbeddedRouterBackend(BaseRouterBackend):
             else (self._config_loader.get_role_chain(role) or ["unknown"])[0]
         )
 
+        # Extract _aura_routing_context from GenerateResult if present (TG4).
+        routing_context: dict | None = None
+        if hasattr(fabric_result, "routing_context") and fabric_result.routing_context is not None:
+            rc = fabric_result.routing_context
+            routing_context = {
+                "strategy": getattr(rc, "strategy", None),
+                "confidence_score": getattr(rc, "confidence_score", None),
+                "complexity_score": getattr(rc, "complexity_score", None),
+                "selected_route": getattr(rc, "selected_route", None),
+                "analyzer_chain": list(getattr(rc, "analyzer_chain", [])),
+                "intent": getattr(rc, "intent", None),
+                "hard_routed": getattr(rc, "hard_routed", False),
+                "simulated_cost_avoided": getattr(rc, "simulated_cost_avoided", 0.0),
+            }
+            # Hard-route degradation detection: flag if local-only and response is degraded.
+            if routing_context.get("hard_routed") and (not result_text or len(result_text) < 10):
+                degradations.append(
+                    DegradationNotice(
+                        capability="hard_routing",
+                        requested="local_only",
+                        actual="local_degraded",
+                        reason="Hard-routed response may be lower quality than cloud alternative.",
+                    )
+                )
+                log.warning("embedded.hard_route_degraded", routing_context=routing_context)
+
         route_result = RouteResult(
             content=result_text,
             model_used=model_used,
             metadata={"analyzer_used": self._get_active_analyzer_id()},
             degradations=degradations,
+            routing_context=routing_context,
         )
 
         # --- Artifact execution for actionable intents ----------------
@@ -292,6 +319,7 @@ class EmbeddedRouterBackend(BaseRouterBackend):
                         "execution_trace": full_trace,
                     },
                     degradations=route_result.degradations,
+                    routing_context=route_result.routing_context,
                 )
 
         return route_result
