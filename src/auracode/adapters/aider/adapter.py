@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,18 @@ _INTENT_MAP: dict[str, RequestIntent] = {
     "ask": RequestIntent.CHAT,
     "architect": RequestIntent.PLAN,
 }
+
+
+def _read_git_head(working_dir: str) -> str | None:
+    """Return the current git ref for *working_dir*, or None if unavailable."""
+    head_path = os.path.normpath(os.path.join(working_dir, ".git", "HEAD"))
+    try:
+        with open(head_path, encoding="utf-8") as fh:
+            ref = fh.read().strip()
+        # "ref: refs/heads/main" → strip the "ref: " prefix; detached HEAD is a raw SHA.
+        return ref[5:] if ref.startswith("ref: ") else ref
+    except OSError:
+        return None
 
 
 class AiderAdapter(BaseAdapter):
@@ -98,13 +111,16 @@ class AiderAdapter(BaseAdapter):
                 sensitivity_label=sensitivity_label,
             )
 
+        git_ref = _read_git_head(working_dir)
+        enriched_options = {**options, "git_ref": git_ref} if git_ref is not None else options
+
         return EngineRequest(
             request_id=str(uuid.uuid4()),
             intent=intent,
             prompt=prompt,
             context=session_context,
             adapter_name=self.name,
-            options=options,
+            options=enriched_options,
         )
 
     async def translate_response(self, response: EngineResponse) -> Any:

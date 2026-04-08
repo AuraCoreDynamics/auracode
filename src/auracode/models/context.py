@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FileContext(BaseModel):
@@ -29,15 +30,10 @@ class SessionContext(BaseModel):
     history: list[dict[str, str]] = []
     metadata: dict[str, Any] = {}
     journal: list[dict[str, Any]] = []
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     # Context semantics for sovereignty/retrieval-aware routing (TG2/TG7).
     project_id: str | None = None
     sensitivity_label: str | None = None
     changed_files: list[str] = []
     diff_summary: str | None = None
-    retrieval_hints: list[str] = []
-    # Context semantics (TG2)
-    changed_files: list[str] = []
-    diff_summary: str | None = None
-    project_id: str | None = None
-    sensitivity_label: str | None = None
     retrieval_hints: list[str] = []

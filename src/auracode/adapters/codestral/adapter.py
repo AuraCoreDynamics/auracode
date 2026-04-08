@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from pathlib import Path
 from typing import Any
@@ -77,6 +78,15 @@ class CodestralAdapter(BaseAdapter):
                 project_id=project_id,
                 sensitivity_label=sensitivity_label,
             )
+
+        # FIM cache keying: hash prefix+suffix so downstream can deduplicate completions.
+        prefix: str = options.get("prefix", "")
+        suffix_text: str = options.get("suffix", "")
+        if prefix or suffix_text:
+            fim_key = hashlib.sha256(
+                f"{prefix}\x00{suffix_text}".encode(), usedforsecurity=False
+            ).hexdigest()[:16]
+            options = {**options, "fim_cache_key": fim_key}
 
         return EngineRequest(
             request_id=str(uuid.uuid4()),

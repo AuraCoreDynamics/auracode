@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,17 @@ _INTENT_MAP: dict[str, RequestIntent] = {
     "explain": RequestIntent.EXPLAIN_CODE,
     "commit": RequestIntent.GENERATE_CODE,
 }
+
+
+def _read_git_head(working_dir: str) -> str | None:
+    """Return the current git ref for *working_dir*, or None if unavailable."""
+    head_path = os.path.normpath(os.path.join(working_dir, ".git", "HEAD"))
+    try:
+        with open(head_path, encoding="utf-8") as fh:
+            ref = fh.read().strip()
+        return ref[5:] if ref.startswith("ref: ") else ref
+    except OSError:
+        return None
 
 
 class CopilotAdapter(BaseAdapter):
@@ -81,6 +93,10 @@ class CopilotAdapter(BaseAdapter):
         # For commit intent, set a flag in options.
         if intent_key == "commit":
             options = {**options, "commit": True}
+
+        git_ref = _read_git_head(working_dir)
+        if git_ref is not None:
+            options = {**options, "git_ref": git_ref}
 
         return EngineRequest(
             request_id=str(uuid.uuid4()),

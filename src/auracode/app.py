@@ -103,7 +103,7 @@ def create_application(
 
         embedded_backend = EmbeddedRouterBackend(config.router_config_path)
     except ImportError:
-        log.debug("aurarouter_not_available")
+        log.warning("aurarouter_not_available")
 
     # If grid configured, try failover setup
     default_backend: Any = None
@@ -126,7 +126,7 @@ def create_application(
             else:
                 default_backend = grid_backend
         except ImportError:
-            log.debug("grid_deps_not_available")
+            log.warning("grid_deps_not_available")
             default_backend = embedded_backend
     else:
         default_backend = embedded_backend
