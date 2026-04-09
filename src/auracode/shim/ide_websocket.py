@@ -126,9 +126,27 @@ async def handle_chat(ws: web.WebSocketResponse, data: dict, engine) -> None:
     finally:
         _cancel_flags.pop(request_id, None)
 
+    # Extract AuraRouter telemetry from the last routed stream result (fail-safe).
+    aura_routing_context: dict | None = None
+    try:
+        router = getattr(engine, "router", None)
+        if router is not None:
+            last_result = router.get_last_stream_result()
+            if last_result is not None:
+                rc = getattr(last_result, "routing_context", None)
+                if rc is not None:
+                    aura_routing_context = {
+                        "is_local": bool(rc.get("hard_routed", False)),
+                        "simulated_cost_avoided": float(rc.get("simulated_cost_avoided", 0.0)),
+                        "complexity_score": int(rc.get("complexity_score", 0)),
+                    }
+    except Exception:
+        pass  # telemetry is best-effort; never crash the WS handler
+
     end = StreamEnd(
         request_id=request_id,
         model_used=model_used,
+        aura_routing_context=aura_routing_context,
     )
     await ws.send_json(end.model_dump())
 

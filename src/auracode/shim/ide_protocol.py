@@ -116,6 +116,7 @@ class StreamEnd(BaseModel):
     model_used: str | None = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    aura_routing_context: dict[str, Any] | None = None
 
 
 class ToolRequest(BaseModel):
