@@ -2,7 +2,7 @@
 # Override by placing a copy at ~/.config/auracode/auracode.yaml
 
 # Path to an AuraRouter config (if using AuraRouter as backend)
-router_config_path: null
+router_config_path: C:/auragrid_dev/apps/aurarouter/auraconfig.yaml
 
 # Adapter used when none is specified
 default_adapter: opencode
