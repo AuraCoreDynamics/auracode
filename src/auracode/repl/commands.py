@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from auracode.repl.console import AuraCodeConsole
+
+logger = logging.getLogger("AuraCode.REPL")
 
 
 @dataclass
@@ -167,8 +170,8 @@ async def _handle_analyzer(console: AuraCodeConsole, args: str) -> str | None:
             try:
                 console.preferences_manager.set("active_analyzer", name)
                 console.preferences_manager.save()
-            except Exception:
-                pass
+            except Exception as ex:  # noqa: F841
+                logger.debug("repl.commands._handle_analyzer_error", exc_info=True)
         return f"Active analyzer: {name}"
     else:
         return f"Failed to set analyzer '{name}'. Use /analyzer to see available options."
@@ -198,7 +201,8 @@ async def _handle_adapter(console: AuraCodeConsole, args: str) -> str | None:
     if hasattr(console, "preferences_manager") and console.preferences_manager is not None:
         try:
             console.preferences_manager.set("default_adapter", adapter.name)
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            logger.debug("repl.commands._handle_adapter_error", exc_info=True)
             pass  # Non-critical: don't let pref save failure block switching.
     return f"Switched to {adapter.name}."
 
@@ -435,7 +439,8 @@ async def _handle_capabilities(console: AuraCodeConsole, args: str) -> str | Non
     """Show backend capabilities."""
     try:
         caps = await console.engine.router.get_capabilities()
-    except Exception:
+    except Exception as ex:  # noqa: F841
+        logger.debug("repl.commands._handle_capabilities_error", exc_info=True)
         return "Unable to query backend capabilities."
 
     if not caps:

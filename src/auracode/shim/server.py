@@ -25,7 +25,10 @@ async def health_check(request: web.Request) -> web.Response:
 
 def create_app(engine) -> web.Application:
     """Create an aiohttp app wired to the given engine."""
-    app = web.Application(middlewares=[error_middleware, logging_middleware])
+    app = web.Application(
+        middlewares=[error_middleware, logging_middleware],
+        client_max_size=10 * 1024 * 1024,  # 10 MB max request body
+    )
     app["engine"] = engine
 
     app.router.add_post("/v1/chat/completions", chat_completions)

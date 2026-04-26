@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from auracode.models.preferences import _PREFS_FILE, UserPreferences
+
+logger = logging.getLogger("AuraCode.Preferences")
 
 
 class PreferencesManager:
@@ -27,7 +30,8 @@ class PreferencesManager:
             if not isinstance(data, dict):
                 return UserPreferences()
             return UserPreferences(**data)
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            logger.debug("engine.preferences._load_from_disk_error", exc_info=True)
             return UserPreferences()
 
     def load(self) -> UserPreferences:

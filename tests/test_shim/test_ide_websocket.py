@@ -62,6 +62,7 @@ class _MockEngine:
 
     def __init__(self, router=None):
         self.router = router or _StreamingMockRouter()
+        self.config = type("Config", (), {"cors_allowed_origins": "http://localhost:*"})()
         self.session_manager = MagicMock()
         self.session_manager._sessions = {}
         self.session_manager.get.return_value = None

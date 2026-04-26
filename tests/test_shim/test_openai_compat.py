@@ -101,12 +101,16 @@ async def test_chat_completions_stream(client):
 
     # Should contain data lines and [DONE]
     lines = [line for line in text.split("\n") if line.startswith("data: ")]
-    assert len(lines) >= 2  # content chunk + stop chunk + [DONE]
+    assert len(lines) >= 3  # role + content chunk + stop chunk + [DONE]
 
-    # First chunk should have content
-    first_chunk = json.loads(lines[0].removeprefix("data: "))
-    assert first_chunk["object"] == "chat.completion.chunk"
-    assert "content" in first_chunk["choices"][0]["delta"]
+    # First data chunk is the role
+    role_chunk = json.loads(lines[0].removeprefix("data: "))
+    assert role_chunk["object"] == "chat.completion.chunk"
+    assert "role" in role_chunk["choices"][0]["delta"]
+
+    # Second chunk should have content
+    content_chunk = json.loads(lines[1].removeprefix("data: "))
+    assert "content" in content_chunk["choices"][0]["delta"]
 
     # Last data line is [DONE]
     assert lines[-1] == "data: [DONE]"

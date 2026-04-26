@@ -76,6 +76,9 @@ class RouteResult(BaseModel):
 class BaseRouterBackend(ABC):
     """ABC for backends that select a model and execute inference."""
 
+    def __init__(self) -> None:
+        self._last_stream_result: RouteResult | None = None
+
     @abstractmethod
     async def route(
         self,

@@ -7,6 +7,7 @@ protobuf compilation at runtime or test time.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -30,6 +31,8 @@ class GridResponse:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     error: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    routing_context: dict[str, Any] | None = None
 
 
 @dataclass

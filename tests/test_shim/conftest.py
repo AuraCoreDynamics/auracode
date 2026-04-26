@@ -28,6 +28,7 @@ class _MockEngine:
     def __init__(self) -> None:
         self.router = _MockRouter()
         self.execute = AsyncMock(side_effect=self._execute)
+        self.config = type("Config", (), {"cors_allowed_origins": "http://localhost:*"})()
 
     async def _execute(self, request: Any) -> EngineResponse:
         return EngineResponse(
@@ -36,6 +37,9 @@ class _MockEngine:
             model_used="mock-model-v1",
             usage=TokenUsage(prompt_tokens=10, completion_tokens=20),
         )
+
+    async def execute_stream(self, request: Any):
+        yield "mock response"
 
 
 @pytest.fixture()

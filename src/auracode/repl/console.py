@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 
 from rich.console import Console
@@ -28,6 +29,8 @@ from auracode.models.request import (
     SovereigntyEnforcement,
     SovereigntyPolicy,
 )
+
+logger = logging.getLogger("AuraCode.REPL")
 
 # Intent keywords that appear at the start of a prompt.
 _INTENT_PREFIXES: dict[str, RequestIntent] = {
@@ -238,7 +241,8 @@ class AuraCodeConsole:
         """Print a response, rendering markdown if rich is available."""
         try:
             self.rich.print(Markdown(text))
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            logger.debug("repl.console._print_output_error", exc_info=True)
             self.rich.print(text)
 
     async def run(self) -> None:

@@ -147,10 +147,12 @@ def create_application(
             if loop and loop.is_running():
                 # Already inside an event loop — schedule as a task.
                 # The preference will be applied once the loop processes it.
-                loop.create_task(default_backend.set_active_analyzer(prefs.active_analyzer))
+                task = loop.create_task(default_backend.set_active_analyzer(prefs.active_analyzer))
+                task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
             else:
                 _aio.run(default_backend.set_active_analyzer(prefs.active_analyzer))
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            log.debug("app.create_application_error", exc_info=True)
             pass  # Non-critical — analyzer preference is best-effort
 
     # Wire adapters

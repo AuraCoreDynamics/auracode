@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from auracode.grid.messages import GridRequest, GridResponse
@@ -24,7 +25,11 @@ def engine_request_to_grid(
 
     str_options: dict[str, str] = {}
     if options:
-        str_options = {k: str(v) for k, v in options.items()}
+        for k, v in options.items():
+            if isinstance(v, (str, int, float, bool)):
+                str_options[k] = str(v)
+            else:
+                str_options[k] = json.dumps(v)
 
     return GridRequest(
         request_id=request_id,
@@ -42,14 +47,12 @@ def grid_response_to_route_result(response: GridResponse) -> RouteResult:
         completion_tokens=response.completion_tokens,
     )
     # Carry any metadata fields the grid response may provide.
-    metadata: dict[str, Any] = {}
-    if hasattr(response, "metadata") and response.metadata:
-        metadata = dict(response.metadata)
+    metadata: dict[str, Any] = dict(response.metadata) if response.metadata else {}
 
     # Propagate routing context if the grid node returned one.
-    routing_context: dict[str, Any] | None = None
-    if hasattr(response, "routing_context") and response.routing_context:
-        routing_context = dict(response.routing_context)
+    routing_context: dict[str, Any] | None = (
+        dict(rc) if (rc := getattr(response, "routing_context", None)) else None
+    )
 
     return RouteResult(
         content=response.content,

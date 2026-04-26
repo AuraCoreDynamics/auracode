@@ -141,9 +141,9 @@ class TestAuraCodeConfig:
         ca = tmp_path / "ca.pem"
         cert = tmp_path / "cert.pem"
         key = tmp_path / "key.pem"
-        ca.write_bytes(b"CA")
-        cert.write_bytes(b"CERT")
-        key.write_bytes(b"KEY")
+        ca.write_bytes(b"-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n")
+        cert.write_bytes(b"-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n")
+        key.write_bytes(b"-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n")
         cfg = AuraCodeConfig(
             grid_ca_cert=str(ca),
             grid_tls_cert=str(cert),

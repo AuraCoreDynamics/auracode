@@ -183,6 +183,8 @@ class AuraCodeEngine:
         response = EngineResponse(
             request_id=request.request_id,
             content=full_content,
+            model_used=stream_result.model_used if stream_result else None,
+            usage=stream_result.usage if stream_result else None,
             execution_metadata=exec_meta,
         )
         self.session_manager.update(session.session_id, request, response, journal=journal_entries)
@@ -223,8 +225,8 @@ class AuraCodeEngine:
             elif isinstance(d, dict):
                 try:
                     degradation_notices.append(DegradationNotice(**d))
-                except Exception:
-                    pass
+                except Exception as ex:  # noqa: F841
+                    log.debug("engine.core._extract_execution_metadata_error", exc_info=True)
 
         return ExecutionMetadata(
             analyzer_used=meta.get("analyzer_used"),

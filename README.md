@@ -2,11 +2,11 @@
 
 ![Version](https://img.shields.io/badge/version-0.1.0-blue) ![Python](https://img.shields.io/badge/python-3.12%2B-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-**Terminal-native, vendor-agnostic AI coding assistant powered by Federated Mixture-of-Experts.**
+**Terminal-native, sovereign, and vendor-agnostic AI coding assistant powered by Federated Mixture-of-Experts.**
 
-AuraCode is a different kind of coding tool. Where other assistants lock you into a single model from a single vendor, AuraCode routes every request to the right model for the job — automatically, transparently, and under your control. A quick variable rename goes to a fast local model that responds in milliseconds. A complex architectural refactor goes to a frontier reasoning model. You don't choose; the system knows.
+AuraCode is a different kind of coding tool. It is an **orchestrator**, not a model. Where other assistants lock you into a single cloud provider, AuraCode routes every request to the right model for the job — whether it's a 3B parameter specialist running on your laptop or a 400B parameter frontier model in the cloud. You maintain absolute control over your data, your costs, and your sovereignty.
 
-AuraCode speaks the languages your tools already speak. It exposes an OpenAI-compatible API, so any IDE extension — Copilot, Continue, Cody, or your own — works without modification. It provides CLI adapters that mirror the interfaces of Claude Code, Aider, and Codestral. Swap your backend without changing your workflow.
+AuraCode speaks the languages your tools already speak. It exposes an OpenAI-compatible API, so any IDE extension — Copilot, Continue, Cody, or your own — works without modification. It provides CLI adapters that mirror the interfaces of Claude Code, Aider, and Codestral. Swap your backend models without changing your workflow.
 
 ```
 pip install -e ".[dev]"
@@ -17,41 +17,121 @@ auracode status
 
 ## Why Federated Mixture-of-Experts?
 
-Every AI coding tool today makes you pick a model. You either get a fast model that hallucinates on hard problems, or a frontier model that's slow and expensive for simple tasks. You accept this tradeoff because the tools don't give you a choice.
+Every AI coding tool today makes you pick a model. You either get a fast model that
+hallucinates on hard problems, or a frontier model that's slow and expensive for simple
+tasks. You accept this tradeoff because the tools don't give you a choice.
 
 AuraCode eliminates the tradeoff.
 
-When you ask AuraCode to generate code, it classifies the *intent* of your request — is this code generation, explanation, review, planning? — and routes it to the model best suited for that class of work. Code generation goes to fast, specialized coding models. Planning and architecture go to deep reasoning models. Simple completions go to tiny local models that cost nothing and respond instantly.
+When you ask AuraCode to generate code, it classifies the *intent* of your request — is this
+code generation, explanation, review, planning? — and routes it to the model best suited
+for that class of work. Code generation goes to fast, specialized coding models. Planning
+and architecture go to deep reasoning models. Simple completions go to tiny local models
+that cost nothing and respond instantly.
 
-This is Federated Mixture-of-Experts (FMoE): a routing fabric that treats models as specialists in a team, not as interchangeable commodities. The "federated" part means the models can live anywhere — on your laptop, on your team's GPU server, on a cloud API — and AuraCode stitches them into a single coherent assistant.
+This is **Federated Mixture-of-Experts (FMoE)**: a routing fabric that treats models as
+specialists in a team, not as interchangeable commodities. The "federated" part means the
+models can live anywhere — on your laptop, on your team's GPU server, on a cloud API — and
+AuraCode stitches them into a single coherent assistant.
+
+### The Orchestrator Advantage
+
+In an era of rapidly evolving "frontier" models, the most valuable tool isn't the model
+itself — it's the **orchestrator** that can switch between them. AuraCode treats new
+model drops (like the latest OpenAI Codex or DeepSeek releases) as **upgrades to your
+backend roster**, not as replacements for your workflow. By decoupling the interface from
+the inference, AuraCode ensures you always have the best tool for the job without vendor
+lock-in.
 
 ### What this means in practice
 
 **Scenario: You're building a new REST API.**
 
-You open your terminal and ask AuraCode to plan the endpoint structure. AuraCode routes this to a reasoning model — Claude Opus, DeepSeek-R1, or whatever frontier model your team has configured — because planning requires deep architectural thinking. The model returns a structured plan with endpoint definitions, data models, and error handling strategy.
+You open your terminal and ask AuraCode to plan the endpoint structure. AuraCode routes this
+to a reasoning model — Claude Opus, DeepSeek-R1, or whatever frontier model your team has
+configured — because planning requires deep architectural thinking. The model returns a
+structured plan with endpoint definitions, data models, and error handling strategy.
 
-You approve the plan. Now you ask AuraCode to generate the implementation. This time, AuraCode routes to a fast coding model — Sonnet, Codestral, or a local CodeLlama — because implementation from a clear spec is a well-bounded task. The code arrives in seconds, not minutes.
+You approve the plan. Now you ask AuraCode to generate the implementation. This time,
+AuraCode routes to a fast coding model — Sonnet, Codestral, or a local CodeLlama — because
+implementation from a clear spec is a well-bounded task. The code arrives in seconds, not
+minutes.
 
-You review the generated code. You spot something odd in the error handling. You ask AuraCode to explain the pattern. AuraCode routes to the reasoning model again, because explanation requires understanding intent and context, not just pattern matching.
+**Scenario: You're on a plane with no internet (DDIL Operations).**
 
-Three requests. Three different models. Zero configuration changes. You didn't think about model selection once.
+AuraCode doesn't stop working. It falls back to local models running on your hardware —
+Phi-4, Llama, Mistral, whatever you've downloaded. The experience degrades gracefully:
+planning might be slower, but code generation and completion still work at full speed
+because those local models are more than capable for bounded coding tasks. When you land
+and reconnect, AuraCode picks up cloud models again without any action on your part.
+AuraCode is built for **Disconnected, Disrupted, Intermittent, and Limited-bandwidth (DDIL)**
+environments from day zero.
 
-**Scenario: You're on a plane with no internet.**
+**Scenario: Your team works with classified or regulated data.**
 
-AuraCode doesn't stop working. It falls back to local models running on your hardware — Phi-3, Llama, Mistral, whatever you've downloaded. The experience degrades gracefully: planning might be slower, but code generation and completion still work at full speed because those local models are more than capable for bounded coding tasks. When you land and reconnect, AuraCode picks up cloud models again without any action on your part.
-
-No other coding assistant offers this. They either require the cloud or they're local-only. AuraCode is both, automatically.
-
-**Scenario: Your team works with classified data.**
-
-Every prompt you send to a cloud API leaves your network. For teams handling proprietary algorithms, regulated data, or classified information, this is a non-starter. AuraCode, when connected to a local AuraRouter instance with on-premise models, keeps everything on your hardware. The inference happens locally. The prompts never leave. The model weights are yours to audit.
-
-When the sensitivity allows it, you can configure AuraCode to route non-sensitive tasks (boilerplate generation, documentation, test scaffolding) to cloud models for speed, while keeping sensitive architectural and domain-specific work local. The routing is configurable per-intent, so you control exactly what crosses the network boundary.
+Every prompt you send to a cloud API leaves your network. For teams handling proprietary
+algorithms, regulated data, or classified information, this is a non-starter. AuraCode,
+when connected to a local AuraRouter instance with on-premise models, keeps everything
+on your hardware. The inference happens locally. The prompts never leave. The model weights
+are yours to audit. This is the **Sovereign Difference**: privacy is a hard constraint,
+not a feature toggle.
 
 **Scenario: You're reviewing a teammate's pull request with 47 changed files.**
 
-You point AuraCode at the diff. With a local-only tool, the context window fills up fast — you get a shallow review of the first few files and nothing on the rest. With AuraCode, when the context exceeds your local model's capacity, the request automatically escalates to a model with a larger context window — or, if you have AuraGrid configured, distributes the review across multiple nodes that each handle a subset of files and merge findings. The result is a comprehensive review that would have taken you an hour, delivered in seconds.
+You point AuraCode at the diff. With a local-only tool, the context window fills up fast —
+you get a shallow review of the first few files and nothing on the rest. With AuraCode,
+when the context exceeds your local model's capacity, the request automatically escalates
+to a model with a larger context window — or, if you have AuraGrid configured, distributes
+the review across multiple nodes that each handle a subset of files and merge findings.
+The result is a comprehensive review that would have taken you an hour, delivered in
+seconds, powered by your team's **latent hardware**.
+
+## Sovereignty vs. The "Tethered" Trap
+
+The AI industry is currently using the word "Local" to mean two very different things. It
+is important to understand the difference between being **Tethered** and being **Sovereign**.
+
+### The "Tethered" Trap (Most AI Tools)
+Most "Local AI" features are like a smart lightbulb: it lives in your house, but it won't
+work if the manufacturer's servers go down. 
+
+- **The Hidden Umbilical Cord:** These tools might do small tasks (like finishing a word)
+  on your laptop, but as soon as you ask a "big" question, your code is quietly bundled
+  up and sent to a cloud server.
+- **The "Kill Switch":** If you lose internet, or if the vendor changes their terms of
+  service, the tool stops working. You are "renting" your productivity.
+- **Data Leaks:** You have no real way to verify that your proprietary logic isn't being
+  used to train the next version of the vendor's model.
+
+### True Sovereignty (AuraCode)
+AuraCode is built on the principle of **Strategic Autonomy**. It is like having a
+high-end generator and a private well: you aren't waiting for the city to turn on the
+power.
+
+- **The Brain is in the Building:** With AuraCode, the "thinking" happens on hardware you
+  own. Whether it's your laptop or a server in your rack, your data never leaves your
+  control.
+- **Works in the Dark:** AuraCode is built for "Offline-First" operations. It doesn't
+  need to "phone home" to check a license or ask for permission to help you code.
+- **You Own the Improvements:** When you use our "Foundry" feature to train a model on
+  your specific project, that intelligence belongs to you. It's a permanent asset for
+  your company, not a feature you're renting from a cloud provider.
+
+**The Bottom Line:** Don't settle for "Local-ish." If a tool requires a login to a cloud
+service just to start up, it isn't local — it's tethered. AuraCode gives you the power of
+modern AI with the security of a locked door.
+
+### Capability Matrix: AuraCode vs. The Cloud Silos
+
+| Capability | Vendor-Locked Tools (Codex/Copilot) | AuraCode + AuraCore Stack |
+| :--- | :--- | :--- |
+| **Thinking Location** | **Cloud-Only.** Every "thought" happens on the vendor's servers. | **Multi-Tier.** Thinking happens on your laptop, your team's server, or the cloud. |
+| **Internet Status** | **"Always-On."** No internet means no AI assistance. | **Works in the Dark.** Fully functional in air-gapped or disconnected environments. |
+| **Data Privacy** | **Trust-Based.** You hope your code isn't being "absorbed" by the vendor. | **Sovereign.** Your data stays within your firewalls. Zero-leakage by design. |
+| **Hardware Use** | **Rented.** You pay to use the vendor's massive data centers. | **Owned.** Uses your "Latent Hardware" — idle office PCs and server racks. |
+| **Specialization** | **Generic.** One model tries to be "okay" at everything for everyone. | **Specialized.** Domain-expert models fine-tuned on *your* specific project. |
+| **Cost Model** | **The AI "Tax."** A flat monthly fee that never goes away. | **ROI-Driven.** Routes to free local models first; shows you exactly what you save. |
+| **Vendor Lock-in** | **Hard-Wired.** You are stuck with one vendor's model and pricing. | **Decoupled.** Swap the "Brain" (model) instantly without changing your tool. |
 
 ---
 
@@ -485,37 +565,53 @@ The active analyzer is persisted in user preferences and restored on next launch
 
 ## Working With the Full AuraCore Stack
 
-AuraCode is designed to work standalone with any OpenAI-compatible API. But its architecture is specifically designed to unlock capabilities that standalone operation cannot provide — capabilities that emerge when AuraCode is connected to the broader AuraCore fabric.
+AuraCode is designed to work standalone with any OpenAI-compatible API. But its architecture
+is specifically designed to unlock capabilities that standalone operation cannot provide —
+capabilities that emerge when AuraCode is connected to the broader AuraCore fabric.
 
-### AuraRouter: The Routing Brain
+### AuraRouter: The Routing Brain and Cost Engine
 
-AuraRouter is the open-source multi-model routing fabric that AuraCode embeds as its primary backend. When AuraCode is configured with a `router_config_path`, every request flows through AuraRouter's intent-plan-execute loop:
+AuraRouter is the open-source multi-model routing fabric that AuraCode embeds as its primary
+backend. When AuraCode is configured with a `router_config_path`, every request flows through
+AuraRouter's intent-plan-execute loop.
 
-1. **Intent analysis** classifies the request (is this code generation? explanation? planning?)
-2. **Role chain resolution** determines which models to try, in what order
-3. **Execution with fallback** tries models in sequence until one succeeds
+Beyond routing, AuraRouter provides **Traffic Cost Analysis**. By tracking token usage and
+comparing it against cloud provider pricing, AuraRouter provides a direct financial argument
+for moving workloads on-prem. It doesn't just route your prompts; it proves the ROI of
+your local compute.
 
-AuraRouter handles the complexity of managing multiple model providers (Ollama, llama.cpp, Claude, Gemini, OpenAI-compatible endpoints) behind a single interface. You configure your model roster once in AuraRouter's `auraconfig.yaml` and every tool in the AuraCore ecosystem — including AuraCode — sees the same set of models.
+### AuraGrid: Distributed Compute via Latent Hardware
 
-### AuraGrid: Distributed Compute When You Need It
+AuraCode works entirely on a single machine. But some tasks genuinely benefit from
+distributed execution — large codebase reviews where the context exceeds any single model's
+window, parallel code generation across multiple files, or simply offloading heavy
+inference from your development machine so it stays responsive.
 
-AuraCode works entirely on a single machine. But some tasks genuinely benefit from distributed execution — large codebase reviews where the context exceeds any single model's window, parallel code generation across multiple files, or simply offloading heavy inference from your development machine so it stays responsive.
+When `grid_endpoint` is configured, AuraCode's `FailoverBackend` delegates requests that
+exceed `local_context_limit` to your team's **AuraGrid** fabric. This distributed compute
+mesh pools the power of "latent hardware" — repurposed servers, idle workstations, and
+dedicated GPU nodes — into a unified inference engine.
 
-When `grid_endpoint` is configured, AuraCode's `FailoverBackend` handles this transparently. Requests that exceed `local_context_limit` are serialized to protobuf and sent to the grid over gRPC with mTLS. The grid distributes the work across nodes that bid on it based on their available capacity — a low-powered node won't attempt work it can't handle.
+AuraGrid's auction-based resource allocation means you're never over-provisioning. While
+traditional cloud setups charge for idle time, AuraGrid nodes only accept work when they
+have the capacity, ensuring maximum efficiency across heterogeneous hardware.
 
-The key design principle is graceful degradation. If the grid goes down, AuraCode falls back to local execution. Your workflow never breaks because the grid is unavailable. The grid is an accelerator, not a dependency.
+### AuraXLM: Private Knowledge and Domain Specialists
 
-AuraGrid's auction-based resource allocation also means you're never over-provisioning. Traditional cloud setups require you to guess how much GPU capacity you need and pay for idle time. The grid's market-based model means nodes only accept work they can handle efficiently, and work automatically flows to the most cost-effective node.
+When AuraRouter is connected to **AuraXLM**, AuraCode's intelligence is grounded in your
+private context. AuraXLM provides **Deep-RAG** and **ULS Anchor Search** that index your
+codebase and prior reasoning traces, ensuring that model responses reflect your actual
+API surfaces and architectural patterns.
 
-### AuraXLM: Knowledge-Augmented Intelligence
+AuraXLM's **Model Foundry** takes this further by fine-tuning small, fast models (like Phi-4
+or Llama 3) on your specific project. These domain specialists can outperform generalist
+frontier models on your specific codebase while running locally, offline, at zero marginal
+cost.
 
-When AuraRouter is connected to AuraXLM — the decentralized mixture-of-experts system — AuraCode's capabilities extend further. AuraXLM provides retrieval-augmented generation (RAG) that grounds model responses in your actual codebase and documentation, not just the model's training data.
-
-This means when you ask AuraCode to generate code that integrates with your existing system, the response reflects your actual API surfaces, naming conventions, and architectural patterns — because AuraXLM has indexed them. When you ask for a review, the reviewer understands your project's specific error handling strategy and dependency policies, not just generic best practices.
-
-AuraXLM's Model Foundry takes this further: it can fine-tune small, fast models (Phi-3, Llama) on your project's codebase, creating domain specialists that understand your patterns at a level that general-purpose models never will. A 3.8B parameter model fine-tuned on your codebase can outperform a 70B general-purpose model for your specific project's coding tasks — and it runs locally, offline, for free.
-
-The combination is powerful: AuraXLM's domain specialists handle the routine coding work (completions, boilerplate, pattern-following) at zero marginal cost, while frontier cloud models handle the genuinely novel work (architectural planning, complex refactoring, cross-cutting analysis). AuraCode's intent-based routing makes this split invisible to you.
+The result is a tiered intelligence strategy: AuraXLM's local specialists handle 90% of
+routine coding work, while expensive frontier cloud models are reserved only for genuinely
+novel architectural challenges. AuraCode's intent-based routing makes this entire
+optimization loop invisible to the developer.
 
 ---
 

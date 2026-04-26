@@ -134,6 +134,7 @@ async def chat_completions(request: web.Request) -> web.StreamResponse:
     stream: bool = body.get("stream", False)
     temperature: float | None = body.get("temperature")
     max_tokens: int | None = body.get("max_tokens")
+    response_format: dict[str, Any] | None = body.get("response_format")
 
     # Extract prompt (last user message) and history (everything before).
     prompt = messages[-1].get("content", "")
@@ -145,40 +146,46 @@ async def chat_completions(request: web.Request) -> web.StreamResponse:
         options["temperature"] = temperature
     if max_tokens is not None:
         options["max_tokens"] = max_tokens
+    if response_format and response_format.get("type") == "json_object":
+        options["json_mode"] = True
 
     engine_request = _build_engine_request(prompt, history, intent, options)
     engine = request.app["engine"]
+
+    if stream:
+        completion_id = _generate_id()
+        return await _stream_response(request, engine, engine_request, model, completion_id)
+
     response: EngineResponse = await engine.execute(engine_request)
 
     completion_id = _generate_id()
     used_model = response.model_used or model
-
-    if stream:
-        return await _stream_response(request, response, used_model, completion_id)
 
     return web.json_response(_format_chat_response(response, used_model, completion_id))
 
 
 async def _stream_response(
     request: web.Request,
-    response: EngineResponse,
+    engine: Any,
+    engine_request: EngineRequest,
     model: str,
     completion_id: str,
 ) -> web.StreamResponse:
-    """Stream the response as Server-Sent Events."""
+    """Stream the response as Server-Sent Events, one per chunk."""
+    cors_origin = getattr(engine.config, "cors_allowed_origins", "http://localhost:*")
     stream_response = web.StreamResponse(
         status=200,
         headers={
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": cors_origin,
         },
     )
     await stream_response.prepare(request)
 
-    # Send the content as a single chunk (engine doesn't stream natively).
-    chunk_data = {
+    # First chunk: send the role.
+    role_data = {
         "id": completion_id,
         "object": "chat.completion.chunk",
         "created": int(time.time()),
@@ -186,12 +193,29 @@ async def _stream_response(
         "choices": [
             {
                 "index": 0,
-                "delta": {"role": "assistant", "content": response.content},
+                "delta": {"role": "assistant"},
                 "finish_reason": None,
             }
         ],
     }
-    await stream_response.write(f"data: {json.dumps(chunk_data)}\n\n".encode())
+    await stream_response.write(f"data: {json.dumps(role_data)}\n\n".encode())
+
+    # Stream content chunks from the engine.
+    async for chunk in engine.execute_stream(engine_request):
+        chunk_data = {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"content": chunk},
+                    "finish_reason": None,
+                }
+            ],
+        }
+        await stream_response.write(f"data: {json.dumps(chunk_data)}\n\n".encode())
 
     # Send the final stop chunk.
     stop_data = {

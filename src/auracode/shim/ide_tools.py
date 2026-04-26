@@ -69,7 +69,10 @@ class ToolManager:
         await ws.send_json(msg.model_dump())
 
         try:
-            return await future
+            return await asyncio.wait_for(future, timeout=30.0)
+        except TimeoutError:
+            log.warning("ide_tools.timeout", request_id=request_id, tool=tool)
+            raise
         finally:
             self._pending.pop(request_id, None)
 

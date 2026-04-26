@@ -38,12 +38,23 @@ class AuraCodeConfig(BaseModel):
     default_sensitivity_label: str | None = None
     default_retrieval_mode: str = "disabled"
     default_execution_mode: str = "standard"
+    cors_allowed_origins: str = "http://localhost:*"
 
     @model_validator(mode="after")
     def _validate_pki_paths(self) -> AuraCodeConfig:
-        """Verify that any configured PKI certificate/key paths exist on disk."""
+        """Verify configured PKI cert/key paths exist and contain valid PEM."""
         for field_name in ("grid_ca_cert", "grid_tls_cert", "grid_tls_key"):
             value: str | None = getattr(self, field_name)
-            if value is not None and not Path(value).exists():
-                raise ValueError(f"{field_name} path does not exist: {value!r}")
+            if value is not None:
+                p = Path(value)
+                if not p.exists():
+                    raise ValueError(f"{field_name} path does not exist: {value!r}")
+                try:
+                    header = p.read_text(encoding="utf-8")[:64]
+                except Exception as exc:
+                    raise ValueError(f"{field_name} is not readable: {exc}") from exc
+                if "-----BEGIN " not in header:
+                    raise ValueError(
+                        f"{field_name} does not appear to be a valid PEM file: {value!r}"
+                    )
         return self

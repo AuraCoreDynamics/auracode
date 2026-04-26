@@ -33,7 +33,8 @@ def discover_adapters(registry: AdapterRegistry) -> None:
         module_name = module_info.name
         try:
             module = importlib.import_module(module_name)
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            logger.debug("adapters.loader.discover_adapters_error", exc_info=True)
             logger.warning(
                 "adapter_import_failed",
                 module=module_name,
@@ -52,7 +53,8 @@ def discover_adapters(registry: AdapterRegistry) -> None:
         try:
             register_fn(registry)
             logger.info("adapter_registered", module=module_name)
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            logger.debug("adapters.loader.discover_adapters_error", exc_info=True)
             logger.warning(
                 "adapter_register_failed",
                 module=module_name,

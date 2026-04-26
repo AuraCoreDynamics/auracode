@@ -57,6 +57,7 @@ class GridDelegateBackend(BaseRouterBackend):
         ca_cert: str | None = None,
         server_name: str | None = None,
     ) -> None:
+        super().__init__()
         self._endpoint = endpoint
         self._timeout = timeout
         self._tls_cert = tls_cert
@@ -158,6 +159,12 @@ class GridDelegateBackend(BaseRouterBackend):
 
         self._stub = auracode_grid_pb2_grpc.AuraCodeGridStub(self._channel)
 
+    def _require_channel(self) -> None:
+        """Ensure the gRPC channel is open, raising if it cannot be created."""
+        self._ensure_channel()
+        if self._channel is None:
+            raise GridConnectionError(f"Failed to establish gRPC channel to {self._endpoint}")
+
     # ------------------------------------------------------------------
     # BaseRouterBackend interface
     # ------------------------------------------------------------------
@@ -170,6 +177,7 @@ class GridDelegateBackend(BaseRouterBackend):
         options: dict[str, Any] | None = None,
     ) -> RouteResult:
         """Serialize to GridRequest, call Execute, return RouteResult."""
+        self._require_channel()
         request_id = uuid.uuid4().hex
         grid_req = engine_request_to_grid(
             request_id=request_id,
@@ -188,6 +196,7 @@ class GridDelegateBackend(BaseRouterBackend):
 
     async def list_models(self) -> list[ModelInfo]:
         """Call ListModels on the grid and return ModelInfo list."""
+        self._require_channel()
         model_list = await self._call_list_models()
         return [
             ModelInfo(
@@ -200,10 +209,12 @@ class GridDelegateBackend(BaseRouterBackend):
 
     async def health_check(self) -> bool:
         """Call HealthCheck on the grid endpoint."""
+        self._require_channel()
         try:
             status = await self._call_health_check()
             return status.healthy
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            logger.debug("grid.client.health_check_error", exc_info=True)
             logger.debug("Grid health check failed", exc_info=True)
             return False
 

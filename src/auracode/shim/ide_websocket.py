@@ -140,7 +140,8 @@ async def handle_chat(ws: web.WebSocketResponse, data: dict, engine) -> None:
                         "simulated_cost_avoided": float(rc.get("simulated_cost_avoided", 0.0)),
                         "complexity_score": int(rc.get("complexity_score", 0)),
                     }
-    except Exception:
+    except Exception as ex:  # noqa: F841
+        log.debug("shim.ide_websocket.handle_chat_error", exc_info=True)
         pass  # telemetry is best-effort; never crash the WS handler
 
     end = StreamEnd(
@@ -155,7 +156,8 @@ def handle_cancel(data: dict) -> None:
     """Set the cancellation flag for an in-progress request."""
     try:
         cancel = CancelRequest.model_validate(data)
-    except Exception:
+    except Exception as ex:  # noqa: F841
+        log.debug("shim.ide_websocket.handle_cancel_error", exc_info=True)
         return
     event = _cancel_flags.get(cancel.request_id)
     if event is not None:
@@ -167,7 +169,8 @@ def handle_tool_response(data: dict) -> None:
     """Resolve a pending tool future from an IDE tool response."""
     try:
         resp = ToolResponse.model_validate(data)
-    except Exception:
+    except Exception as ex:  # noqa: F841
+        log.debug("shim.ide_websocket.handle_tool_response_error", exc_info=True)
         return
 
     # Find the tool manager that owns this request.
@@ -199,7 +202,8 @@ async def ide_websocket_handler(request: web.Request) -> web.WebSocketResponse:
             if raw_msg.type == WSMsgType.TEXT:
                 try:
                     data = raw_msg.json()
-                except Exception:
+                except Exception as ex:  # noqa: F841
+                    log.debug("shim.ide_websocket.ide_websocket_handler_error", exc_info=True)
                     err = ServerError(message="Invalid JSON", code="invalid_json")
                     await ws.send_json(err.model_dump())
                     continue

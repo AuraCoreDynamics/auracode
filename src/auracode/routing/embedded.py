@@ -49,6 +49,7 @@ class EmbeddedRouterBackend(BaseRouterBackend):
     """
 
     def __init__(self, config_path: str | None = None) -> None:
+        super().__init__()
         from aurarouter.config import ConfigLoader
         from aurarouter.fabric import ComputeFabric
 
@@ -264,6 +265,11 @@ class EmbeddedRouterBackend(BaseRouterBackend):
                 "intent": getattr(rc, "intent", None),
                 "hard_routed": getattr(rc, "hard_routed", False),
                 "simulated_cost_avoided": getattr(rc, "simulated_cost_avoided", 0.0),
+                # ZReach/RAG extensions
+                "retrieval_used": getattr(rc, "retrieval_used", False),
+                "sources": list(getattr(rc, "sources", [])),
+                "author_id": getattr(rc, "author_id", None),
+                "project_id": getattr(rc, "project_id", None),
             }
             # Hard-route degradation detection: flag if local-only and response is degraded.
             if routing_context.get("hard_routed") and (not result_text or len(result_text) < 10):
@@ -345,14 +351,16 @@ class EmbeddedRouterBackend(BaseRouterBackend):
                 and self._fabric is not None
                 and bool(self._config_loader.config)
             )
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            log.debug("routing.embedded.health_check_error", exc_info=True)
             return False
 
     def _get_active_analyzer_id(self) -> str | None:
         """Return the active analyzer ID from the config loader, or None."""
         try:
             return self._config_loader.get_active_analyzer()
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            log.debug("routing.embedded._get_active_analyzer_id_error", exc_info=True)
             return None
 
     async def get_capabilities(self) -> list[BackendCapability]:
@@ -390,10 +398,15 @@ class EmbeddedRouterBackend(BaseRouterBackend):
         Tries ``execute_stream`` first (generator-based streaming).  If the
         fabric does not support streaming yet, falls back to ``execute`` and
         yields the complete response as a single chunk.
+
+        Stores a :class:`RouteResult` in ``_last_stream_result`` so callers
+        can retrieve metadata after the stream is exhausted.
         """
         role = map_intent_to_role(intent)
+        route_options = self._build_route_options(intent, context, options)
         context_prefix = build_context_prompt(context)
-        full_prompt = context_prefix + prompt
+        hints_prefix = self._routing_hints_prefix(route_options)
+        full_prompt = hints_prefix + context_prefix + prompt
 
         # Attempt true streaming via execute_stream.
         if hasattr(self._fabric, "execute_stream"):
@@ -402,22 +415,48 @@ class EmbeddedRouterBackend(BaseRouterBackend):
                 # execute_stream may be sync iterator — run chunks in thread.
                 sentinel = object()
                 it = iter(stream)
+                collected: list[str] = []
                 while True:
                     chunk = await asyncio.to_thread(next, it, sentinel)
                     if chunk is sentinel:
                         break
+                    collected.append(chunk)
                     yield chunk
+                # Store metadata after stream is exhausted.
+                model_used = (self._config_loader.get_role_chain(role) or ["unknown"])[0]
+                self._last_stream_result = RouteResult(
+                    content="".join(collected),
+                    model_used=model_used,
+                    metadata={"analyzer_used": self._get_active_analyzer_id()},
+                )
                 return
-            except Exception:
+            except Exception as ex:  # noqa: F841
+                log.debug("routing.embedded.route_stream_error", exc_info=True)
                 log.debug(
                     "embedded.stream_fallback", reason="execute_stream failed, using execute()"
                 )
 
         # Fallback: non-streaming execute.
-        fabric_result = await asyncio.to_thread(self._fabric.execute, role, full_prompt)
+        fabric_result = await asyncio.to_thread(
+            self._fabric.execute,
+            role,
+            full_prompt,
+            options=route_options,
+        )
         if fabric_result is None:
             raise RuntimeError(f"All models failed for role '{role}' — no response from fabric.")
-        yield fabric_result.text if hasattr(fabric_result, "text") else str(fabric_result)
+        result_text = fabric_result.text if hasattr(fabric_result, "text") else str(fabric_result)
+        model_used = (
+            fabric_result.model_id
+            if hasattr(fabric_result, "model_id") and fabric_result.model_id
+            else (self._config_loader.get_role_chain(role) or ["unknown"])[0]
+        )
+        self._last_stream_result = RouteResult(
+            content=result_text,
+            model_used=model_used,
+            metadata={"analyzer_used": self._get_active_analyzer_id()},
+        )
+        yield result_text
 
     # ------------------------------------------------------------------ #
     # Catalog methods
@@ -443,7 +482,8 @@ class EmbeddedRouterBackend(BaseRouterBackend):
                         )
                     )
             return result
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            log.debug("routing.embedded.list_services_error", exc_info=True)
             return []
 
     async def list_analyzers(self) -> list[AnalyzerInfo]:
@@ -467,7 +507,8 @@ class EmbeddedRouterBackend(BaseRouterBackend):
                         )
                     )
             return result
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            log.debug("routing.embedded.list_analyzers_error", exc_info=True)
             return []
 
     async def get_active_analyzer(self) -> AnalyzerInfo | None:
@@ -488,7 +529,8 @@ class EmbeddedRouterBackend(BaseRouterBackend):
                 capabilities=data.get("capabilities", []),
                 is_active=True,
             )
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            log.debug("routing.embedded.get_active_analyzer_error", exc_info=True)
             return None
 
     async def set_active_analyzer(self, analyzer_id: str | None) -> bool:
@@ -496,5 +538,6 @@ class EmbeddedRouterBackend(BaseRouterBackend):
         try:
             self._config_loader.set_active_analyzer(analyzer_id)
             return True
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            log.debug("routing.embedded.set_active_analyzer_error", exc_info=True)
             return False

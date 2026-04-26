@@ -117,7 +117,8 @@ class FailoverBackend(BaseRouterBackend):
                 primary_healthy = await self._primary.health_check()
                 if primary_healthy:
                     return await self._primary.route(prompt, intent, context, options)
-            except Exception:
+            except Exception as ex:  # noqa: F841
+                logger.debug("grid.failover.route_error", exc_info=True)
                 logger.warning(
                     "Primary route failed for over-threshold request; falling back.", exc_info=True
                 )
@@ -157,8 +158,8 @@ class FailoverBackend(BaseRouterBackend):
         primary_healthy = False
         try:
             primary_healthy = await self._primary.health_check()
-        except Exception:
-            pass
+        except Exception as ex:  # noqa: F841
+            logger.debug("grid.failover._route_require_primary_error", exc_info=True)
         if not primary_healthy:
             raise RuntimeError(
                 "Grid execution required by policy but primary backend is unavailable."
@@ -176,7 +177,8 @@ class FailoverBackend(BaseRouterBackend):
         primary_healthy = False
         try:
             primary_healthy = await self._primary.health_check()
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            logger.debug("grid.failover._try_primary_then_fallback_error", exc_info=True)
             logger.debug("Primary health check raised", exc_info=True)
 
         if not primary_healthy:
@@ -187,7 +189,8 @@ class FailoverBackend(BaseRouterBackend):
             result = await self._primary.route(prompt, intent, context, options)
             logger.debug("Primary backend succeeded.")
             return result
-        except Exception:
+        except Exception as ex:  # noqa: F841
+            logger.debug("grid.failover._try_primary_then_fallback_error", exc_info=True)
             logger.warning("Primary route failed; falling back.", exc_info=True)
             return await self._fallback.route(prompt, intent, context, options)
 
@@ -201,7 +204,8 @@ class FailoverBackend(BaseRouterBackend):
                 for m in models:
                     if m.model_id not in seen:
                         seen[m.model_id] = m
-            except Exception:
+            except Exception as ex:  # noqa: F841
+                logger.debug("grid.failover.list_models_error", exc_info=True)
                 logger.debug("list_models failed for %s", type(backend).__name__, exc_info=True)
 
         return list(seen.values())
@@ -212,7 +216,8 @@ class FailoverBackend(BaseRouterBackend):
             try:
                 if await backend.health_check():
                     return True
-            except Exception:
+            except Exception as ex:  # noqa: F841
+                logger.debug("grid.failover.health_check_error", exc_info=True)
                 continue
         return False
 
@@ -229,7 +234,8 @@ class FailoverBackend(BaseRouterBackend):
                 for s in services:
                     if s.service_id not in seen:
                         seen[s.service_id] = s
-            except Exception:
+            except Exception as ex:  # noqa: F841
+                logger.debug("grid.failover.list_services_error", exc_info=True)
                 logger.debug(
                     "list_services failed for %s",
                     type(backend).__name__,
@@ -246,7 +252,8 @@ class FailoverBackend(BaseRouterBackend):
                 for a in analyzers:
                     if a.analyzer_id not in seen:
                         seen[a.analyzer_id] = a
-            except Exception:
+            except Exception as ex:  # noqa: F841
+                logger.debug("grid.failover.list_analyzers_error", exc_info=True)
                 logger.debug(
                     "list_analyzers failed for %s",
                     type(backend).__name__,
@@ -261,7 +268,8 @@ class FailoverBackend(BaseRouterBackend):
                 result = await backend.get_active_analyzer()
                 if result is not None:
                     return result
-            except Exception:
+            except Exception as ex:  # noqa: F841
+                logger.debug("grid.failover.get_active_analyzer_error", exc_info=True)
                 logger.debug(
                     "get_active_analyzer failed for %s",
                     type(backend).__name__,
@@ -275,7 +283,8 @@ class FailoverBackend(BaseRouterBackend):
             try:
                 if await backend.set_active_analyzer(analyzer_id):
                     return True
-            except Exception:
+            except Exception as ex:  # noqa: F841
+                logger.debug("grid.failover.set_active_analyzer_error", exc_info=True)
                 logger.debug(
                     "set_active_analyzer failed for %s",
                     type(backend).__name__,

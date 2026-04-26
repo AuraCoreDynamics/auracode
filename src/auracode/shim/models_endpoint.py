@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 from aiohttp import web
+
+logger = logging.getLogger("AuraCode.Shim")
 
 
 async def list_models(request: web.Request) -> web.Response:
@@ -16,7 +20,8 @@ async def list_models(request: web.Request) -> web.Response:
 
     try:
         models = await engine.router.list_models()
-    except Exception:
+    except Exception as ex:  # noqa: F841
+        logger.debug("shim.models_endpoint.list_models_error", exc_info=True)
         models = []
 
     data = [

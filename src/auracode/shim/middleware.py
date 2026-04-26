@@ -34,7 +34,7 @@ async def error_middleware(request: web.Request, handler) -> web.StreamResponse:
         return web.json_response(
             {
                 "error": {
-                    "message": f"Internal server error: {exc}",
+                    "message": "Internal server error.",
                     "type": "server_error",
                     "code": "internal_error",
                 }
@@ -57,12 +57,17 @@ async def logging_middleware(request: web.Request, handler) -> web.StreamRespons
     return response
 
 
-async def cors_handler(request: web.Request) -> web.Response:
-    """Handle CORS preflight requests."""
-    return web.Response(
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        }
-    )
+def make_cors_handler(allowed_origin: str = "http://localhost:*") -> ...:
+    """Create a CORS preflight handler with the given allowed origin."""
+
+    async def cors_handler(request: web.Request) -> web.Response:
+        """Handle CORS preflight requests."""
+        return web.Response(
+            headers={
+                "Access-Control-Allow-Origin": allowed_origin,
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            }
+        )
+
+    return cors_handler

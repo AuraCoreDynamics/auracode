@@ -244,83 +244,150 @@ def create_mcp_server(engine: Any) -> Any | None:
             return "No models available"
         return "\n".join(f"{m.model_id} ({m.provider})" for m in models)
 
+    from pathlib import Path
+
+    def _safe_resolve(file_path: str, working_dir: str) -> Path | None:
+        """Resolve *file_path* and verify it lives under *working_dir*.
+
+        Returns the resolved ``Path`` on success, or ``None`` if the path
+        escapes the working directory (path-traversal protection).
+        """
+        base = Path(working_dir).resolve()
+        target = (base / file_path).resolve()
+        is_same = str(target) == str(base)
+        is_under = str(target).startswith(str(base) + "\\") or str(target).startswith(
+            str(base) + "/"
+        )
+        if not (is_same or is_under):
+            return None
+        return target
+
+    @server.tool()
+    async def auracode_read_file(path: str) -> str:
+        """Read a file from the local filesystem."""
+        working_dir = getattr(engine.config, "working_directory", ".")
+        resolved = _safe_resolve(path, working_dir)
+        if resolved is None:
+            return f"Error: Path '{path}' is outside the working directory."
+
+        if not resolved.is_file():
+            return f"Error: {path} is not a file or does not exist."
+
+        try:
+            return resolved.read_text(encoding="utf-8", errors="replace")
+        except OSError as e:
+            return f"Error reading file: {e}"
+
     @server.tool()
     async def auracode_write_file(path: str, content: str) -> str:
         """Write a file to the local filesystem. Requires allow_file_write permission."""
-        from pathlib import Path
-
         from auracode.utils.journal import FileJournal
 
         if not engine.config.permissions.allow_file_write:
             return "Error: File write permission denied. Restart with --allow-write."
 
-        p = Path(path)
+        working_dir = getattr(engine.config, "working_directory", ".")
+        resolved = _safe_resolve(path, working_dir)
+        if resolved is None:
+            return f"Error: Path '{path}' is outside the working directory."
+
         before_content = None
-        if p.exists():
-            before_content = p.read_text(encoding="utf-8", errors="replace")
+        if resolved.exists():
+            before_content = resolved.read_text(encoding="utf-8", errors="replace")
 
         try:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(content, encoding="utf-8")
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            resolved.write_text(content, encoding="utf-8")
 
             # Record in journal (Task 2.3)
             if not hasattr(engine, "_journal"):
                 engine._journal = FileJournal()
-            engine._journal.record(path, "write", before_content, content)
+            engine._journal.record(str(resolved), "write", before_content, content)
 
-            return f"Successfully wrote to {path}"
+            return f"Successfully wrote to {resolved}"
         except Exception as e:
             return f"Error writing file: {e}"
 
     @server.tool()
     async def auracode_edit_file(path: str, old_text: str, new_text: str) -> str:
         """Edit a file by replacing old_text with new_text. Requires allow_file_write."""
-        from pathlib import Path
-
         from auracode.utils.journal import FileJournal
 
         if not engine.config.permissions.allow_file_write:
             return "Error: File write permission denied. Restart with --allow-write."
 
-        p = Path(path)
-        if not p.is_file():
+        working_dir = getattr(engine.config, "working_directory", ".")
+        resolved = _safe_resolve(path, working_dir)
+        if resolved is None:
+            return f"Error: Path '{path}' is outside the working directory."
+
+        if not resolved.is_file():
             return f"Error: {path} is not a file."
 
-        content = p.read_text(encoding="utf-8", errors="replace")
+        content = resolved.read_text(encoding="utf-8", errors="replace")
         if old_text not in content:
             return f"Error: old_text not found in {path}"
 
         new_content = content.replace(old_text, new_text)
         try:
-            p.write_text(new_content, encoding="utf-8")
+            resolved.write_text(new_content, encoding="utf-8")
 
             # Record in journal (Task 2.3)
             if not hasattr(engine, "_journal"):
                 engine._journal = FileJournal()
             engine._journal.record(
-                path, "edit", content, new_content, {"old_text": old_text, "new_text": new_text}
+                str(resolved),
+                "edit",
+                content,
+                new_content,
+                {"old_text": old_text, "new_text": new_text},
             )
 
-            return f"Successfully edited {path}"
+            return f"Successfully edited {resolved}"
         except Exception as e:
             return f"Error editing file: {e}"
 
     @server.tool()
     async def auracode_bash(command: str) -> str:
-        """Execute a bash command. Requires allow_shell_commands."""
-        import re
+        """Execute a shell command. Requires allow_shell_commands."""
+        import shlex
         import subprocess
+        import sys
 
         if not engine.config.permissions.allow_shell_commands:
             return "Error: Shell command permission denied. Restart with --allow-shell."
 
         if not engine.config.permissions.allow_destructive_shell_commands:
-            destructive_patterns = [r"rm\s", r"mv\s", r"git\s+reset", r"git\s+clean"]
+            import re
+
+            destructive_patterns = [
+                r"rm\s",
+                r"mv\s",
+                r"git\s+reset",
+                r"git\s+clean",
+                r"powershell",
+                r"pwsh",
+                r"del\s",
+                r"rmdir\s",
+                r"rd\s",
+                r"format\s",
+            ]
             if any(re.search(p, command) for p in destructive_patterns):
                 return "Error: Destructive command blocked. Restart with --unsafe to allow."
 
         try:
-            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=60)
+            if sys.platform == "win32":
+                # Windows: use cmd.exe explicitly instead of shell=True
+                args = ["cmd.exe", "/c", command]
+            else:
+                # Unix: parse into argument list for safe execution
+                args = shlex.split(command)
+            result = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
             return (
                 f"Exit code: {result.returncode}\nStdout: {result.stdout}\nStderr: {result.stderr}"
             )
