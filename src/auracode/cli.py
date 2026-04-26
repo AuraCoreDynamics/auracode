@@ -110,13 +110,29 @@ def serve(ctx: click.Context, port: int, host: str) -> None:
         raise SystemExit(1)
 
     from auracode.app import create_application
+    from auracode.catalog_registration import CatalogRegistrar
     from auracode.shim.server import create_app
 
     engine, _, _, _ = create_application(ctx.obj.get("config_path"))
     click.echo(f"Starting AuraCode API shim on {host}:{port}")
     app = create_app(engine)
+
+    mcp_endpoint = f"http://{host}:{port}"
+    registrar = CatalogRegistrar(
+        mcp_endpoint=mcp_endpoint,
+        aurarouter_url=engine.config.aurarouter_url,
+    )
+
+    async def on_startup(_app: web.Application) -> None:
+        asyncio.ensure_future(registrar.start_with_retry())
+
+    async def on_shutdown(_app: web.Application) -> None:
+        await registrar.stop()
+
     import aiohttp.web as web
 
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
     web.run_app(app, host=host, port=port)
 
 
