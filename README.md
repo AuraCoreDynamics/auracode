@@ -195,6 +195,14 @@ auracode serve --port 9000
 
 Then configure your IDE extension to point at `http://127.0.0.1:8741/v1` as the API base URL. The extension thinks it's talking to OpenAI. AuraCode intercepts every request and routes it through your configured model fabric.
 
+When `aurarouter_url` is set in `auracode.yaml`, `auracode serve` also push-registers AuraCode with AuraRouter's unified catalog on startup (capabilities: code-generation, code-review, code-refactoring, security-review) and sends a heartbeat every 5 minutes. Deregistration happens on clean shutdown. This is opt-in — leaving `aurarouter_url: null` (the default) disables registration entirely.
+
+```yaml
+# auracode.yaml — enable AuraRouter catalog registration
+aurarouter_url: "http://localhost:8321"   # null to disable (default)
+mcp_self_endpoint: "http://myhost:8741"   # how AuraRouter calls back to this instance
+```
+
 **Endpoints served:**
 | Endpoint | Method | Description |
 |----------|--------|-------------|

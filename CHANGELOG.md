@@ -2,7 +2,22 @@
 
 All notable changes to AuraCode are documented here.
 
-## [0.2.0] — 2026-03-24
+## [Unreleased] — 2026-04-26
+
+### Added
+- **AuraRouter catalog push-registration** — `CatalogRegistrar` class in `catalog_registration.py`:
+  - Registers `auracode-mcp` as a service artifact with capabilities (`code-generation`, `code-review`, `code-refactoring`, `code-explanation`, `security-review`) and intents (`GENERATE_CODE`, `EDIT_CODE`, `REVIEW`, `EXPLAIN_CODE`)
+  - Exponential-backoff retry (1s → 60s cap), configurable `max_retries` (0 = unlimited)
+  - 5-minute heartbeat re-registration loop with broad exception guard (no silent task death)
+  - `auracode serve` wires registration on startup and deregistration on shutdown
+  - `asyncio.create_task()` with exception handler (replaces `ensure_future`)
+- **`aurarouter_url` config field** on `AuraCodeConfig` — defaults to `None` (opt-in; prevents localhost retry-spam on hosts without AuraRouter)
+
+### Changed
+- `catalog_registration.py` `DEFAULT_AURAROUTER_URL` changed from `"http://localhost:8321"` to `None`
+- `AuraCodeConfig.aurarouter_url` default changed from `"http://localhost:8321"` to `None`
+
+
 
 ### Added
 - **Copilot adapter**: Full implementation with suggest, explain, commit commands; intent mappings to GENERATE_CODE and EXPLAIN_CODE
