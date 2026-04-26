@@ -124,7 +124,12 @@ def serve(ctx: click.Context, port: int, host: str) -> None:
     )
 
     async def on_startup(_app: web.Application) -> None:
-        asyncio.ensure_future(registrar.start_with_retry())
+        task = asyncio.create_task(registrar.start_with_retry())
+        task.add_done_callback(
+            lambda t: t.exception() and __import__("logging").getLogger(__name__).error(
+                "Catalog registration task failed: %s", t.exception()
+            ) if not t.cancelled() and t.exception() else None
+        )
 
     async def on_shutdown(_app: web.Application) -> None:
         await registrar.stop()

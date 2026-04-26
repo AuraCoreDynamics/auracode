@@ -33,8 +33,8 @@ class AuraCodeConfig(BaseModel):
     grid_ca_cert: str | None = None
     grid_server_name: str | None = None
     grid_default_routing: str = "auto"
-    # Catalog registration (TG5)
-    aurarouter_url: str = "http://localhost:8321"
+    # Catalog registration (TG5) — None disables; set to AuraRouter URL to enable.
+    aurarouter_url: str | None = None
     # Sovereignty/retrieval defaults (TG7)
     default_sovereignty_enforcement: str = "none"
     default_sensitivity_label: str | None = None

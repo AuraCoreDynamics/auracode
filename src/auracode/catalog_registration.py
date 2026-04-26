@@ -10,10 +10,11 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Default registration config
-DEFAULT_AURAROUTER_URL = "http://localhost:8321"
+# Default registration config — URL is None to require explicit opt-in.
+DEFAULT_AURAROUTER_URL: str | None = None
 DEFAULT_HEARTBEAT_INTERVAL = 300  # 5 minutes
 MAX_BACKOFF = 60  # seconds
+DEFAULT_MAX_RETRIES = 0  # 0 = unlimited
 
 
 def build_catalog_artifact(mcp_endpoint: str) -> dict[str, Any]:
@@ -48,17 +49,20 @@ class CatalogRegistrar:
     def __init__(
         self,
         mcp_endpoint: str,
-        aurarouter_url: str = DEFAULT_AURAROUTER_URL,
+        aurarouter_url: str | None = DEFAULT_AURAROUTER_URL,
         heartbeat_interval: float = DEFAULT_HEARTBEAT_INTERVAL,
     ):
         self._mcp_endpoint = mcp_endpoint
-        self._aurarouter_url = aurarouter_url.rstrip("/")
+        self._aurarouter_url = aurarouter_url.rstrip("/") if aurarouter_url else None
         self._heartbeat_interval = heartbeat_interval
         self._heartbeat_task: asyncio.Task[None] | None = None
         self._registered = False
 
     async def register(self) -> bool:
         """Attempt to register with AuraRouter. Returns True on success."""
+        if self._aurarouter_url is None:
+            logger.debug("AuraRouter URL not configured; skipping registration.")
+            return False
         payload = build_catalog_artifact(self._mcp_endpoint)
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -76,7 +80,7 @@ class CatalogRegistrar:
                 "Catalog registration failed: %d %s", resp.status_code, resp.text
             )
             return False
-        except httpx.HTTPError as exc:
+        except Exception as exc:
             logger.warning("Catalog registration error: %s", exc)
             return False
 
@@ -96,8 +100,13 @@ class CatalogRegistrar:
     async def _heartbeat_loop(self) -> None:
         """Periodically re-register to keep the catalog entry alive."""
         while True:
-            await asyncio.sleep(self._heartbeat_interval)
-            await self.register()
+            try:
+                await asyncio.sleep(self._heartbeat_interval)
+                await self.register()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("Heartbeat error (will retry next cycle): %s", exc)
 
     async def start_heartbeat(self) -> None:
         """Start periodic re-registration heartbeat."""
@@ -115,15 +124,32 @@ class CatalogRegistrar:
             self._heartbeat_task = None
         await self.deregister()
 
-    async def start_with_retry(self) -> None:
-        """Start registration with exponential backoff retry, then begin heartbeat."""
+    async def start_with_retry(
+        self, max_retries: int = DEFAULT_MAX_RETRIES
+    ) -> None:
+        """Start registration with exponential backoff retry, then begin heartbeat.
+
+        Args:
+            max_retries: Maximum retry attempts. 0 = unlimited.
+        """
+        if self._aurarouter_url is None:
+            logger.info("AuraRouter URL not configured; catalog registration disabled.")
+            return
         delay = 1.0
-        while True:
-            if await self.register():
-                await self.start_heartbeat()
-                return
-            logger.info(
-                "Catalog registration retry in %.0fs", delay
-            )
+        attempt = 0
+        while max_retries == 0 or attempt < max_retries:
+            try:
+                if await self.register():
+                    await self.start_heartbeat()
+                    return
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("Registration attempt %d error: %s", attempt + 1, exc)
+            attempt += 1
+            logger.info("Catalog registration retry in %.0fs (attempt %d)", delay, attempt)
             await asyncio.sleep(delay)
             delay = min(delay * 2, MAX_BACKOFF)
+        logger.error(
+            "Catalog registration failed after %d attempts; giving up.", max_retries
+        )
