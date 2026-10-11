@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0",
+  "appId": "auracode",
+  "name": "AuraCode",
+  "version": "0.1.0",
+  "description": "Terminal-native, vendor-agnostic AI coding assistant.",
+  "author": "AuraCore Dynamics Inc.",
+  "installer": {
+    "path": "install.bat",
+    "args": [],
+    "requiredOs": "windows"
+  },
+  "startup": {
+    "path": "auracode.exe",
+    "args": ["start"]
+  },
+  "services": {
+    "poller": {
+      "path": "auracode.exe",
+      "args": ["poller"],
+      "autoRestart": true
+    }
+  },
+  "cellGovernance": {
+    "targetCells": ["developer-node", "builder-node"],
+    "requiredOs": "windows",
+    "minRamMb": 512,
+    "requiresGpu": false
+  }
+}
