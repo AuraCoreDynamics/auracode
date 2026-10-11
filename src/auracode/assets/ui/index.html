@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AuraCode // Mission Command Operations Deck</title>
+  <link rel="stylesheet" href="/ui/styles.css">
+</head>
+<body class="mission-deck">
+  <!-- Top Telemetry Header -->
+  <header class="header-bar" id="flight-header">
+    <div class="header-brand">
+      <div class="logo-glyph" aria-hidden="true">&#9670;</div>
+      <div class="brand-text">
+        <h1 class="brand-title">AURACODE <span class="brand-sub">// MISSION COMMAND</span></h1>
+        <span class="badge badge-version">v0.4.0</span>
+      </div>
+    </div>
+
+      <div class="telemetry-item" id="item-workspace-switcher" title="Active Workspace Target">
+        <span class="telemetry-label">WORKSPACE:</span>
+        <select id="select-active-workspace" class="workspace-select">
+          <option value=".">Current (.)</option>
+        </select>
+      </div>
+      <div class="telemetry-item" id="item-engine-status" title="Active Engine Routing Mode">
+        <span class="telemetry-label">ENGINE:</span>
+        <span class="badge badge-cyan" id="badge-engine">SOVEREIGN / LOCAL</span>
+      </div>
+      <div class="telemetry-item" id="item-auraxlm-status" title="Retrieval Context Engine">
+        <span class="telemetry-label">RETRIEVAL:</span>
+        <span class="badge badge-purple" id="badge-auraxlm">AST REPO-MAP</span>
+      </div>
+      <div class="telemetry-item" id="item-ws-status" title="Live WebSocket Telemetry Bus">
+        <span class="status-dot dot-offline" id="ws-indicator"></span>
+        <span class="telemetry-label">BUS:</span>
+        <span class="telemetry-val" id="ws-status-text">CONNECTING</span>
+      </div>
+    </div>
+  </header>
+
+
+  <!-- Flight Deck Navigation -->
+  <nav class="nav-bar" id="deck-navigation" role="tablist">
+    <button class="nav-tab active" id="tab-fleet" role="tab" aria-selected="true" data-deck="deck-fleet">
+      <span class="tab-icon">&#9638;</span> Fleet Overview
+      <span class="tab-badge" id="badge-fleet-count">0</span>
+    </button>
+    <button class="nav-tab" id="tab-verification" role="tab" aria-selected="false" data-deck="deck-verification">
+      <span class="tab-icon">&#9889;</span> Verification Flight Deck
+      <span class="tab-badge badge-alert" id="badge-verif-status">IDLE</span>
+    </button>
+    <button class="nav-tab" id="tab-conflicts" role="tab" aria-selected="false" data-deck="deck-conflicts">
+      <span class="tab-icon">&#9876;</span> Conflict Radar
+      <span class="tab-badge badge-warning" id="badge-conflict-count">0</span>
+    </button>
+    <button class="nav-tab" id="tab-stream" role="tab" aria-selected="false" data-deck="deck-stream">
+      <span class="tab-icon">&#9658;</span> Live Event Stream
+      <span class="tab-badge" id="badge-stream-count">0</span>
+    </button>
+  </nav>
+
+  <!-- Main View Container -->
+  <main class="main-container" id="main-deck-container">
+    <!-- DECK 1: Fleet Overview -->
+    <section class="deck-section active" id="deck-fleet" role="tabpanel">
+      <div class="deck-header">
+        <div>
+          <h2 class="deck-title">Workspaces & Fleet Oversight</h2>
+          <p class="deck-subtitle">Autonomous agent activity across repositories and bare mirrors.</p>
+        </div>
+        <div class="deck-actions">
+          <button class="btn btn-primary" id="btn-add-workspace">+ Register Workspace</button>
+          <button class="btn btn-secondary" id="btn-refresh-fleet">&#8635; Refresh Fleet</button>
+        </div>
+      </div>
+
+
+      <div class="stats-grid" id="fleet-stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">MONITORED WORKSPACES</div>
+          <div class="stat-value" id="stat-workspace-count">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">ACTIVE BRANCHES</div>
+          <div class="stat-value text-cyan" id="stat-branch-count">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">DIRTY WORKING TREES</div>
+          <div class="stat-value text-amber" id="stat-dirty-count">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">MERGE CONFLICTS</div>
+          <div class="stat-value text-crimson" id="stat-conflict-count">0</div>
+        </div>
+      </div>
+
+      <div class="card-grid" id="fleet-card-grid">
+        <!-- Rendered dynamically via app.js -->
+        <div class="glass-card placeholder-card">
+          <div class="loading-spinner"></div>
+          <p>Scanning local workspaces and mirrors...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- DECK 2: Verification Flight Deck -->
+    <section class="deck-section" id="deck-verification" role="tabpanel">
+      <div class="deck-header">
+        <div>
+          <h2 class="deck-title">Verification Flight Deck</h2>
+          <p class="deck-subtitle">Autonomous self-healing execution loop, test gates, and transactional rollback.</p>
+        </div>
+        <div class="deck-actions">
+          <button class="btn btn-danger" id="btn-rollback" title="Revert files to pre-execution checkpoint">
+            &#8634; Rollback Snapshot
+          </button>
+        </div>
+      </div>
+
+      <!-- Agent Loop Timeline -->
+      <div class="glass-card timeline-panel">
+        <h3 class="panel-title">EXECUTION PIPELINE & REMEDIATION BUDGET (MAX 3 TURNS)</h3>
+        <div class="pipeline-track" id="pipeline-track">
+          <div class="pipeline-step step-complete" id="step-plan">
+            <div class="step-glyph">&#10003;</div>
+            <div class="step-meta">
+              <span class="step-title">Intent Planning</span>
+              <span class="step-desc" id="step-plan-desc">Deterministic AST analysis</span>
+            </div>
+          </div>
+          <div class="pipeline-step step-complete" id="step-edit">
+            <div class="step-glyph">&#10003;</div>
+            <div class="step-meta">
+              <span class="step-title">Artifact Application</span>
+              <span class="step-desc" id="step-edit-desc">Transactional journal snapshot</span>
+            </div>
+          </div>
+          <div class="pipeline-step step-active" id="step-verify">
+            <div class="step-glyph">&#9889;</div>
+            <div class="step-meta">
+              <span class="step-title">Verification Gate</span>
+              <span class="step-desc" id="step-verify-desc">Subprocess test suite</span>
+            </div>
+          </div>
+          <div class="pipeline-step" id="step-remediate">
+            <div class="step-glyph">&#8635;</div>
+            <div class="step-meta">
+              <span class="step-title">Self-Healing Loop</span>
+              <span class="step-desc" id="step-remediate-desc">Bounded diagnosis & repair</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Test Logs Console Drawer -->
+      <div class="glass-card console-panel">
+        <div class="panel-header">
+          <h3 class="panel-title">VERIFICATION OUTPUT STREAM</h3>
+          <span class="badge badge-cyan" id="console-cmd-badge">STANDBY</span>
+        </div>
+        <pre class="console-box" id="verification-console-output">// Waiting for verification command run...</pre>
+      </div>
+    </section>
+
+    <!-- DECK 3: Conflict Radar -->
+    <section class="deck-section" id="deck-conflicts" role="tabpanel">
+      <div class="deck-header">
+        <div>
+          <h2 class="deck-title">Collaborative Conflict Radar</h2>
+          <p class="deck-subtitle">AI 3-Way Merge conflict resolution reconciling offline bare mirror divergent edits.</p>
+        </div>
+        <div class="deck-actions">
+          <button class="btn btn-secondary" id="btn-scan-conflicts">&#8635; Rescan</button>
+          <button class="btn btn-primary" id="btn-resolve-all-conflicts">&#9876; Resolve All Conflicts</button>
+        </div>
+      </div>
+
+      <div class="conflicts-layout">
+        <!-- Conflict File Sidebar -->
+        <aside class="conflict-sidebar glass-card">
+          <h3 class="panel-title">CONFLICTED FILES</h3>
+          <ul class="file-list" id="conflict-file-list">
+            <li class="empty-state">No active Git conflict markers detected.</li>
+          </ul>
+        </aside>
+
+        <!-- 3-Way Visualizer Area -->
+        <div class="conflict-workspace">
+          <div class="conflict-3way-grid" id="conflict-3way-grid">
+            <div class="glass-card conflict-col col-ours">
+              <div class="col-header">
+                <span class="col-tag tag-ours">&lt;&lt;&lt;&lt;&lt;&lt;&lt; OURS (LOCAL)</span>
+                <span class="col-file" id="label-ours-branch">HEAD</span>
+              </div>
+              <pre class="diff-block" id="diff-ours-content">// Select a conflicted file to inspect...</pre>
+            </div>
+
+            <div class="glass-card conflict-col col-theirs">
+              <div class="col-header">
+                <span class="col-tag tag-theirs">&gt;&gt;&gt;&gt;&gt;&gt;&gt; THEIRS (INCOMING)</span>
+                <span class="col-file" id="label-theirs-branch">REMOTE</span>
+              </div>
+              <pre class="diff-block" id="diff-theirs-content">// Select a conflicted file to inspect...</pre>
+            </div>
+          </div>
+
+          <div class="glass-card resolution-card" id="resolution-card">
+            <div class="panel-header">
+              <div>
+                <span class="col-tag tag-resolution">&#9670; AI SYNTHESIZED RESOLUTION</span>
+                <span class="panel-hint">Reconciled intent verified conflict-marker free</span>
+              </div>
+              <button class="btn btn-primary" id="btn-resolve-selected-file">&#10003; Approve &amp; Stage Resolution</button>
+            </div>
+            <pre class="diff-block resolution-block" id="diff-resolution-content">// Resolution preview will generate when resolving selected file...</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DECK 4: Live Event Stream -->
+    <section class="deck-section" id="deck-stream" role="tabpanel">
+      <div class="deck-header">
+        <div>
+          <h2 class="deck-title">Live Telemetry Event Bus</h2>
+          <p class="deck-subtitle">Real-time WebSocket event feed streaming agent, verification, and git events.</p>
+        </div>
+        <div class="deck-actions">
+          <button class="btn btn-secondary" id="btn-clear-stream">&#10005; Clear Feed</button>
+        </div>
+      </div>
+
+      <div class="glass-card terminal-card">
+        <div class="terminal-bar">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot amber"></span>
+          <span class="terminal-dot green"></span>
+          <span class="terminal-title">ws://127.0.0.1:8741/api/events</span>
+          <span class="terminal-count" id="terminal-event-counter">0 events buffered</span>
+        </div>
+        <div class="terminal-feed" id="stream-event-feed">
+          <!-- Dynamically populated via app.js -->
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Notification Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Modal: Register Workspace Dialog -->
+  <dialog id="modal-register-workspace" class="glass-modal">
+    <div class="modal-content">
+      <h3 class="modal-title">Register Project Workspace</h3>
+      <p class="modal-desc">Enter the local filesystem path to an existing repository.</p>
+      <input type="text" id="input-workspace-path" class="modal-input" placeholder="e.g. C:/projects/my-app or /home/dev/repo">
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="btn-cancel-modal">Cancel</button>
+        <button class="btn btn-primary" id="btn-confirm-register">Register</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>
+
