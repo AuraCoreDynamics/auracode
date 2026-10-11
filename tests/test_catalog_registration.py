@@ -131,7 +131,7 @@ class TestCatalogRegistrar:
 
         # Mock register to fail, then succeed on 2nd call
         call_count = 0
-        original_register = registrar.register
+        _ = registrar.register
 
         async def mock_register():
             nonlocal call_count
@@ -174,7 +174,7 @@ class TestCatalogRegistrar:
         registrar.register = mock_register
 
         sleep_count = 0
-        original_sleep = asyncio.sleep
+        _ = asyncio.sleep
 
         async def counting_sleep(duration):
             nonlocal sleep_count

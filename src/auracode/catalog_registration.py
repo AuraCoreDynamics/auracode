@@ -29,12 +29,22 @@ def build_catalog_artifact(mcp_endpoint: str) -> dict[str, Any]:
             "code-refactoring",
             "code-explanation",
             "security-review",
+            "autonomous-act",
+            "ast-repomap",
+            "merge-conflict-resolution",
+            "conventional-commits",
+            "bundle-packaging",
+            "verification-gate",
         ],
         "supported_intents": [
             "GENERATE_CODE",
             "EDIT_CODE",
             "REVIEW",
             "EXPLAIN_CODE",
+            "ACT",
+            "VERIFY",
+            "RESOLVE_CONFLICTS",
+            "PACKAGE_BUNDLE",
         ],
         "spec": {
             "mcp_endpoint": mcp_endpoint,
@@ -72,13 +82,9 @@ class CatalogRegistrar:
                 )
             if resp.is_success:
                 self._registered = True
-                logger.info(
-                    "Registered with AuraRouter catalog at %s", self._aurarouter_url
-                )
+                logger.info("Registered with AuraRouter catalog at %s", self._aurarouter_url)
                 return True
-            logger.warning(
-                "Catalog registration failed: %d %s", resp.status_code, resp.text
-            )
+            logger.warning("Catalog registration failed: %d %s", resp.status_code, resp.text)
             return False
         except Exception as exc:
             logger.warning("Catalog registration error: %s", exc)
@@ -124,9 +130,7 @@ class CatalogRegistrar:
             self._heartbeat_task = None
         await self.deregister()
 
-    async def start_with_retry(
-        self, max_retries: int = DEFAULT_MAX_RETRIES
-    ) -> None:
+    async def start_with_retry(self, max_retries: int = DEFAULT_MAX_RETRIES) -> None:
         """Start registration with exponential backoff retry, then begin heartbeat.
 
         Args:
@@ -150,6 +154,4 @@ class CatalogRegistrar:
             logger.info("Catalog registration retry in %.0fs (attempt %d)", delay, attempt)
             await asyncio.sleep(delay)
             delay = min(delay * 2, MAX_BACKOFF)
-        logger.error(
-            "Catalog registration failed after %d attempts; giving up.", max_retries
-        )
+        logger.error("Catalog registration failed after %d attempts; giving up.", max_retries)

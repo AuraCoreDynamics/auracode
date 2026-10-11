@@ -272,3 +272,31 @@ class TestMcpTools:
         engine.router.list_models.return_value = []
         result = await tools["auracode_models"]()
         assert result == "No models available"
+
+    async def test_new_reverse_mcp_tools_registered(self, tools_and_engine) -> None:
+        tools, _ = tools_and_engine
+        assert "auracode_act" in tools
+        assert "auracode_repomap" in tools
+        assert "auracode_conflicts" in tools
+        assert "auracode_resolve_conflicts" in tools
+        assert "auracode_rollback" in tools
+        assert "auracode_synthesize_commit" in tools
+        assert "auracode_bundle_pack" in tools
+        assert "auracode_bundle_validate" in tools
+
+    async def test_auracode_repomap_executes(self, tools_and_engine, tmp_path) -> None:
+        tools, _ = tools_and_engine
+        sample_file = tmp_path / "sample.py"
+        sample_file.write_text("class MyService:\n    def run(self):\n        pass\n")
+        output = await tools["auracode_repomap"](str(tmp_path))
+        assert "MyService" in output
+        assert "run" in output
+
+    async def test_auracode_conflicts_json(self, tools_and_engine, tmp_path) -> None:
+        import json
+
+        tools, _ = tools_and_engine
+        output = await tools["auracode_conflicts"](str(tmp_path))
+        data = json.loads(output)
+        assert data["count"] == 0
+        assert data["files"] == []

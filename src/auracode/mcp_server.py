@@ -394,4 +394,130 @@ def create_mcp_server(engine: Any) -> Any | None:
         except Exception as e:
             return f"Error executing command: {e}"
 
+    @server.tool()
+    async def auracode_act(
+        prompt: str,
+        verify_command: str | None = None,
+        max_attempts: int = 3,
+    ) -> str:
+        """Execute autonomous self-healing agent loop with verification gates."""
+        from auracode.models.verification import RemediationBudget, VerificationCommand
+
+        req = _build_request(prompt, "generate_code")
+        verif = VerificationCommand(command=verify_command) if verify_command else None
+        budget = RemediationBudget(max_attempts=max_attempts)
+        try:
+            result = await engine.execute_loop(req, verification=verif, budget=budget)
+            lines = [f"Status: {result.status}"]
+            if result.snapshot_id:
+                lines.append(f"Rollback Snapshot: {result.snapshot_id}")
+            if result.remediations:
+                lines.append(f"Remediations: {len(result.remediations)} attempts")
+            if result.final_response and result.final_response.content:
+                lines.append(f"Output:\n{result.final_response.content}")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Error executing act loop: {e}"
+
+    @server.tool()
+    async def auracode_repomap(root_dir: str = ".", max_chars: int = 2048) -> str:
+        """Generate lightweight deterministic AST structural repo-map (<2KB)."""
+        from auracode.engine.repo_map import RepoMapBuilder
+
+        try:
+            builder = RepoMapBuilder(root_dir=root_dir, max_chars=max_chars)
+            return builder.build()
+        except Exception as e:
+            return f"Error building repo-map: {e}"
+
+    @server.tool()
+    async def auracode_conflicts(root_dir: str = ".") -> str:
+        """Scan workspace for active Git conflict marker blocks."""
+        import json
+
+        from auracode.git.conflict_resolver import ConflictMarkerParser
+
+        try:
+            conflicted = ConflictMarkerParser.find_conflicted_files(root_dir)
+            files = [str(p) for p in conflicted]
+            return json.dumps({"count": len(files), "files": files})
+        except Exception as e:
+            return f"Error scanning conflicts: {e}"
+
+    @server.tool()
+    async def auracode_resolve_conflicts(file_path: str) -> str:
+        """Resolve 3-way merge conflict markers in a file using AI."""
+        from pathlib import Path
+
+        from auracode.git.conflict_resolver import MergeConflictResolver
+
+        try:
+            resolver = MergeConflictResolver(engine)
+            success, msg = await resolver.resolve_file(Path(file_path))
+            return f"Success: {success} - {msg}"
+        except Exception as e:
+            return f"Error resolving conflict: {e}"
+
+    @server.tool()
+    async def auracode_rollback(snapshot_id: str) -> str:
+        """Roll back filesystem modifications to a snapshot checkpoint."""
+        journal = getattr(engine, "_journal", None)
+        if not journal:
+            return "Error: No file journal active on engine."
+        try:
+            restored = journal.rollback_snapshot(snapshot_id)
+            return (
+                f"Successfully restored {len(restored)} files to snapshot {snapshot_id}: "
+                f"{', '.join(restored)}"
+            )
+        except KeyError:
+            return f"Error: Snapshot {snapshot_id} not found."
+        except Exception as e:
+            return f"Error during rollback: {e}"
+
+    @server.tool()
+    async def auracode_synthesize_commit(repo_path: str = ".") -> str:
+        """Synthesize a Conventional Commit message from staged Git diffs."""
+        from auracode.git.commit_synthesizer import CommitSynthesizer
+
+        try:
+            synthesizer = CommitSynthesizer(engine)
+            msg = await synthesizer.synthesize_message(repo_path)
+            return msg
+        except Exception as e:
+            return f"Error synthesizing commit: {e}"
+
+    @server.tool()
+    async def auracode_bundle_pack(source_dir: str, output_path: str) -> str:
+        """Pack an application directory into a sealed .aurabundle archive."""
+        from pathlib import Path
+
+        from auracode.bundle.packager import BundlePackager
+
+        try:
+            packed = BundlePackager.pack(Path(source_dir), Path(output_path))
+            info = BundlePackager.inspect(packed)
+            return f"Packed bundle: {packed} (SHA-256: {info['sha256']})"
+        except Exception as e:
+            return f"Error packing bundle: {e}"
+
+    @server.tool()
+    async def auracode_bundle_validate(bundle_path: str) -> str:
+        """Validate an app.manifest.json file or .aurabundle archive."""
+        import json
+        from pathlib import Path
+
+        from auracode.bundle.manifest import ManifestValidator
+        from auracode.bundle.packager import BundlePackager
+
+        try:
+            p = Path(bundle_path)
+            if p.suffix in (".aurabundle", ".zip"):
+                info = BundlePackager.inspect(p)
+                return json.dumps({"valid": True, "bundle": info})
+            is_valid, errors = ManifestValidator.validate_file(p)
+            return json.dumps({"valid": is_valid, "errors": errors})
+        except Exception as e:
+            return f"Error validating bundle: {e}"
+
     return server
