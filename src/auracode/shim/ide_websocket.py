@@ -11,8 +11,14 @@ from aiohttp import WSMsgType, web
 from auracode.models.context import FileContext, SessionContext
 from auracode.models.request import EngineRequest, RequestIntent
 from auracode.shim.ide_protocol import (
+    ActCompleted,
+    ActProgress,
+    ActRequest,
     CancelRequest,
     ChatMessage,
+    RepoMapRequest,
+    RepoMapResponse,
+    ResolveConflictRequest,
     ServerError,
     StatusUpdate,
     StreamEnd,
@@ -180,6 +186,102 @@ def handle_tool_response(data: dict) -> None:
     log.warning("ide_ws.tool_response_orphan", request_id=resp.request_id)
 
 
+async def handle_act(ws: web.WebSocketResponse, data: dict, engine) -> None:
+    """Handle ide.act_request by executing autonomous self-healing loop."""
+    from auracode.models.verification import RemediationBudget, VerificationCommand
+
+    try:
+        req = ActRequest.model_validate(data)
+    except Exception as exc:
+        err = ServerError(message=f"Invalid act request: {exc}", code="invalid_act_request")
+        await ws.send_json(err.model_dump())
+        return
+
+    await ws.send_json(ActProgress(status="running", phase="planning", attempt=1).model_dump())
+
+    verif = (
+        VerificationCommand(command=req.verify_command, working_directory=req.workspace)
+        if req.verify_command
+        else None
+    )
+    budget = RemediationBudget(max_attempts=req.max_attempts)
+
+    eng_req = EngineRequest(
+        request_id=uuid.uuid4().hex,
+        intent=RequestIntent.GENERATE_CODE,
+        prompt=req.prompt,
+        adapter_name="ide-websocket",
+    )
+
+    try:
+        result = await engine.execute_loop(eng_req, verification=verif, budget=budget)
+        out_text = result.final_response.content if result.final_response else ""
+        completed = ActCompleted(
+            status=result.status,
+            snapshot_id=result.snapshot_id,
+            remediations_count=len(result.remediations),
+            output=out_text,
+        )
+        await ws.send_json(completed.model_dump())
+    except Exception as exc:
+        err = ServerError(message=f"Act loop error: {exc}", code="act_failed")
+        await ws.send_json(err.model_dump())
+
+
+async def handle_resolve_conflict(ws: web.WebSocketResponse, data: dict, engine) -> None:
+    """Handle ide.resolve_conflict_request via AI 3-way conflict resolver."""
+    from pathlib import Path
+
+    from auracode.git.conflict_resolver import MergeConflictResolver
+
+    try:
+        req = ResolveConflictRequest.model_validate(data)
+    except Exception as exc:
+        err = ServerError(
+            message=f"Invalid resolve conflict request: {exc}",
+            code="invalid_conflict_request",
+        )
+        await ws.send_json(err.model_dump())
+        return
+
+    resolver = MergeConflictResolver(engine)
+    target_path = Path(req.workspace) / req.file_path
+    success, msg = await resolver.resolve_file(target_path)
+    await ws.send_json(
+        {
+            "type": "ide.resolve_conflict_response",
+            "file_path": req.file_path,
+            "success": success,
+            "message": msg,
+        }
+    )
+
+
+async def handle_repomap(ws: web.WebSocketResponse, data: dict) -> None:
+    """Handle ide.repomap_request by computing structural AST repo-map."""
+    from auracode.engine.repo_map import RepoMapBuilder
+
+    try:
+        req = RepoMapRequest.model_validate(data)
+    except Exception as exc:
+        err = ServerError(
+            message=f"Invalid repomap request: {exc}",
+            code="invalid_repomap_request",
+        )
+        await ws.send_json(err.model_dump())
+        return
+
+    builder = RepoMapBuilder(root_dir=req.workspace_root, max_chars=req.max_chars)
+    map_text = builder.build()
+    _, symbol_count = builder.count_symbols()
+    resp = RepoMapResponse(
+        workspace_root=req.workspace_root,
+        map_text=map_text,
+        symbol_count=symbol_count,
+    )
+    await ws.send_json(resp.model_dump())
+
+
 async def ide_websocket_handler(request: web.Request) -> web.WebSocketResponse:
     """Accept a WebSocket connection and dispatch on message type.
 
@@ -214,6 +316,18 @@ async def ide_websocket_handler(request: web.Request) -> web.WebSocketResponse:
                     # Run chat handler as a background task so the message
                     # loop remains free to process cancel/tool_response.
                     task = asyncio.create_task(handle_chat(ws, data, engine))
+                    chat_tasks.add(task)
+                    task.add_done_callback(chat_tasks.discard)
+                elif msg_type in ("ide.act_request", "act"):
+                    task = asyncio.create_task(handle_act(ws, data, engine))
+                    chat_tasks.add(task)
+                    task.add_done_callback(chat_tasks.discard)
+                elif msg_type in ("ide.resolve_conflict_request", "resolve_conflict"):
+                    task = asyncio.create_task(handle_resolve_conflict(ws, data, engine))
+                    chat_tasks.add(task)
+                    task.add_done_callback(chat_tasks.discard)
+                elif msg_type in ("ide.repomap_request", "repomap"):
+                    task = asyncio.create_task(handle_repomap(ws, data))
                     chat_tasks.add(task)
                     task.add_done_callback(chat_tasks.discard)
                 elif msg_type == "cancel":

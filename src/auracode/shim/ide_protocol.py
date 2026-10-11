@@ -151,3 +151,84 @@ class StatusUpdate(BaseModel):
     request_id: str | None = None
     message: str
     phase: str = ""
+
+
+# ── IDE Protocol V2 Extensions ──────────────────────────────────────────
+
+
+class ActRequest(BaseModel):
+    """Client request to invoke autonomous self-healing execution loop."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.act_request", "act"] = "ide.act_request"
+    prompt: str
+    verify_command: str | None = None
+    max_attempts: int = 3
+    workspace: str = "."
+
+
+class ActProgress(BaseModel):
+    """Server streaming progress of self-healing execution loop."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.act_progress"] = "ide.act_progress"
+    status: str
+    phase: str = "running"
+    attempt: int = 0
+
+
+class ActCompleted(BaseModel):
+    """Server completion payload for self-healing execution loop."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.act_completed"] = "ide.act_completed"
+    status: str
+    snapshot_id: str | None = None
+    remediations_count: int = 0
+    output: str = ""
+
+
+class ResolveConflictRequest(BaseModel):
+    """Client request to resolve 3-way merge conflict in a file."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.resolve_conflict_request", "resolve_conflict"] = (
+        "ide.resolve_conflict_request"
+    )
+    file_path: str
+    workspace: str = "."
+
+
+class ConflictsDetected(BaseModel):
+    """Server notification of active Git merge conflict blocks in workspace."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.conflicts_detected"] = "ide.conflicts_detected"
+    count: int
+    files: list[str] = []
+
+
+class RepoMapRequest(BaseModel):
+    """Client request for structural AST repo-map."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.repomap_request", "repomap"] = "ide.repomap_request"
+    workspace_root: str = "."
+    max_chars: int = 2048
+
+
+class RepoMapResponse(BaseModel):
+    """Server response containing structural AST repo-map."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.repomap_response"] = "ide.repomap_response"
+    workspace_root: str
+    map_text: str
+    symbol_count: int = 0
