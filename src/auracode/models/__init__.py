@@ -9,14 +9,26 @@ from auracode.models.request import (
     RequestIntent,
     TokenUsage,
 )
+from auracode.models.verification import (
+    AgentLoopResult,
+    RemediationBudget,
+    RemediationStep,
+    VerificationCommand,
+    VerificationResult,
+)
 
 __all__ = [
+    "AgentLoopResult",
     "AuraCodeConfig",
     "EngineRequest",
     "EngineResponse",
     "FileArtifact",
     "FileContext",
+    "RemediationBudget",
+    "RemediationStep",
     "RequestIntent",
     "SessionContext",
     "TokenUsage",
+    "VerificationCommand",
+    "VerificationResult",
 ]

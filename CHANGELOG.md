@@ -5,6 +5,52 @@ All notable changes to AuraCode are documented here.
 ## [Unreleased] — 2026-04-26
 
 ### Added
+- **Mission Command Operations Deck & Telemetry Engine**:
+  - `auracode ui` launching a dark-mode glassmorphic single-page operations dashboard on port 8741.
+  - `MissionEventBus` broadcasting real-time agent execution, verification, and git events over WebSockets (`/api/events`).
+  - Fleet management and conflict resolution REST endpoints (`/api/fleet/workspaces`, `/api/fleet/conflicts`, `/api/fleet/rollback`).
+- **Autonomous Self-Healing Agent Loop & Journal Rollback**:
+  - `AgenticExecutionLoop` executing multi-turn code generation with test verification gates and bounded 3-turn remediation budget.
+  - `FileJournal` snapshot checkpoints and one-click transactional rollback restoring exact pre-run SHA-256 states.
+  - REPL slash commands: `/act`, `/verify`, `/rollback`.
+- **Zero-Vector Deterministic AST Repo-Map & AuraXLM Delegation**:
+  - `RepoMapBuilder` extracting classes, functions, and signatures under strict 2KB context window budget without vector databases or embedding overhead.
+  - `AuraXlmRetrievalClient` delegating neural codebase retrieval to enterprise AuraXLM on AuraGrid with typed `DegradationNotice` fallback.
+  - REPL slash command: `/repomap`.
+- **Collaborative Git Engine & Pre-Flight Validation**:
+  - `GitMirrorPoller` pre-flight verification gate testing pushes in scratch clones before triggering AuraGrid application restarts.
+  - `MergeConflictResolver` parsing Git conflict markers (`<<<<<<<`, `|||||||`, `=======`, `>>>>>>>`) and synthesizing semantic conflict-free merges.
+  - `CommitSynthesizer` generating Conventional Commit titles and bodies from staged diffs.
+  - REPL slash commands: `/conflicts`, `/resolve-conflicts`, `/commit`.
+- **Application Packaging & Cell Governance (`.aurabundle`)**:
+  - `BundlePackager` creating and inspecting `.aurabundle` tar.gz archives with SHA-256 digests.
+  - `ManifestValidator` enforcing schema and path traversal security on `app.manifest.json`.
+  - `CellGovernanceSpec` declaring resource limits, network isolation, and cell affinity.
+  - CLI `auracode bundle [pack|validate|inspect]` and REPL slash command `/bundle`.
+- **Node-Local MAS and Reverse-MCP Grid Exposure**:
+  - Expanded FastMCP catalog with 8 new tools (`auracode_act`, `auracode_repomap`,
+    `auracode_conflicts`, `auracode_resolve_conflicts`, `auracode_rollback`,
+    `auracode_synthesize_commit`, `auracode_bundle_pack`, `auracode_bundle_validate`) for a total
+    of 21 registered MCP tools.
+  - `NodeMasAgentClient` registering reverse-MCP tools with node-local MAS at port 8740.
+  - REPL slash command `/mas-status` for inspecting MAS agent health and capabilities.
+- **Multi-Project Mission Command Deck**:
+  - `FleetWorkspaceManager` managing multi-repository metadata and state across disk workspaces.
+  - REST endpoints `GET/POST /api/fleet/workspaces`, `DELETE /api/fleet/workspaces/{id}` with
+    `--auth-token` token authentication middleware gate.
+  - Mission Command UI header dropdown workspace switcher, registration modal, and card actions.
+  - CLI commands `auracode fleet [add|remove|list]`.
+- **Distributed Git Bare Mirrors on AuraGrid**:
+  - `GridMirrorOrchestrator` initializing bare mirrors tracking `main` across grid nodes.
+  - Scratch clone pre-flight test runner with duration telemetry and guaranteed sandbox cleanup.
+  - REPL slash command `/grid-mirror [init|sync|status]`.
+- **IDE Bridges (Visual Studio V2 & Spyder Companion)**:
+  - IDE Protocol V2 schemas (`ActRequest`, `ActProgress`, `ResolveConflictRequest`, etc.).
+  - `SpyderAuraCodeBridge` companion adapter for Spyder IDE Python environments.
+  - Comprehensive integration documentation in `docs/IDE_INTEGRATION.md`.
+- **AuraXLM Commercial Conversion Funnel**:
+  - AST context truncation detection in `RepoMapBuilder` injecting commercial AuraXLM footer.
+  - REPL slash command `/xlm-benchmark` measuring local AST vs. remote neural retrieval.
 - **AuraRouter catalog push-registration** — `CatalogRegistrar` class in `catalog_registration.py`:
   - Registers `auracode-mcp` as a service artifact with capabilities (`code-generation`, `code-review`, `code-refactoring`, `code-explanation`, `security-review`) and intents (`GENERATE_CODE`, `EDIT_CODE`, `REVIEW`, `EXPLAIN_CODE`)
   - Exponential-backoff retry (1s → 60s cap), configurable `max_retries` (0 = unlimited)

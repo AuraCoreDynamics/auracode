@@ -92,6 +92,12 @@ async def _handle_status(console: AuraCodeConsole, args: str) -> str | None:
         f"  Session history: {len(console.session_history)} messages",
     ]
 
+    xlm_ep = getattr(console.engine.config, "auraxlm_endpoint", None)
+    if xlm_ep:
+        lines.append(f"  Retrieval:       AuraXLM neural ({xlm_ep})")
+    else:
+        lines.append("  Retrieval:       Local deterministic AST repo-map (zero-vector)")
+
     # Show active degradations if any.
     last_meta = getattr(console, "_last_execution_metadata", None)
     if last_meta and last_meta.degradations:
@@ -505,6 +511,357 @@ async def _handle_permissions(console: AuraCodeConsole, args: str) -> str | None
         return f"Unknown permission: {name}"
 
 
+async def _handle_act(console: AuraCodeConsole, args: str) -> str | None:
+    """Run an autonomous self-healing agent loop with verification."""
+    import uuid
+
+    from auracode.models.request import EngineRequest, RequestIntent
+    from auracode.models.verification import VerificationCommand
+
+    if not args.strip():
+        return 'Usage: /act PROMPT [--verify "CMD"]'
+
+    prompt = args.strip()
+    verif_cmd: str | None = None
+    if "--verify" in args:
+        parts = args.split("--verify", 1)
+        prompt = parts[0].strip()
+        verif_cmd = parts[1].strip().strip('"').strip("'")
+
+    verif = (
+        VerificationCommand(
+            command=verif_cmd,
+            working_directory=console.session.working_directory,
+        )
+        if verif_cmd
+        else None
+    )
+
+    req = EngineRequest(
+        request_id=str(uuid.uuid4()),
+        intent=RequestIntent.GENERATE_CODE,
+        prompt=prompt,
+        context=console.session,
+        adapter_name=console.active_adapter.name if console.active_adapter else "opencode",
+    )
+
+    result = await console.engine.execute_loop(req, verification=verif)
+    lines = [f"[Agent Loop Status: {result.status}]"]
+    if result.remediations:
+        lines.append(f"Remediation steps ({len(result.remediations)} attempts):")
+        for step in result.remediations:
+            status_tag = "PASS" if step.verification.passed else "FAIL"
+            lines.append(
+                f"  Attempt {step.attempt}: {status_tag} "
+                f"(exit {step.verification.exit_code}, {step.verification.duration_ms}ms)"
+            )
+    if result.rollback_available and result.snapshot_id:
+        lines.append(f"Snapshot created: {result.snapshot_id} (revert with /rollback)")
+    if result.final_response and result.final_response.content:
+        lines.append("")
+        lines.append(result.final_response.content)
+
+    return "\n".join(lines)
+
+
+async def _handle_verify(console: AuraCodeConsole, args: str) -> str | None:
+    """Manually run a verification command."""
+    from auracode.engine.agent_loop import AgenticExecutionLoop
+    from auracode.models.verification import VerificationCommand
+
+    cmd = args.strip()
+    if not cmd:
+        return "Usage: /verify <command>"
+
+    verif = VerificationCommand(
+        command=cmd,
+        working_directory=console.session.working_directory,
+    )
+    loop = AgenticExecutionLoop(console.engine)
+    res = await loop._run_verification(verif)
+
+    status_tag = "PASSED" if res.passed else "FAILED"
+    lines = [
+        f"Verification {status_tag} (exit code: {res.exit_code}, {res.duration_ms}ms)",
+        f"Command: {res.command}",
+    ]
+    if res.stdout:
+        lines.append(f"STDOUT:\n{res.stdout.strip()}")
+    if res.stderr:
+        lines.append(f"STDERR:\n{res.stderr.strip()}")
+    return "\n".join(lines)
+
+
+async def _handle_rollback(console: AuraCodeConsole, args: str) -> str | None:
+    """Roll back file changes to a previous snapshot."""
+    journal = getattr(console.engine, "_journal", None)
+    if not journal or not journal.snapshots:
+        return "No active rollback snapshots available."
+
+    snap_id = args.strip()
+    if not snap_id:
+        # Pick the most recent snapshot
+        snap_id = list(journal.snapshots.keys())[-1]
+
+    try:
+        paths = journal.rollback_snapshot(snap_id)
+        if not paths:
+            return f"Snapshot {snap_id} rolled back. (No files modified)."
+        restored_list = "\n".join(f"  - {p}" for p in paths)
+        return f"Snapshot {snap_id} successfully rolled back. Restored files:\n{restored_list}"
+    except KeyError:
+        return f"Snapshot ID '{snap_id}' not found."
+
+
+async def _handle_repomap(console: AuraCodeConsole, args: str) -> str | None:
+    """Show the structural AST repo-map for the current workspace."""
+    from auracode.engine.repo_map import RepoMapBuilder
+
+    work_dir = console.session.working_directory if console.session else "."
+    builder = RepoMapBuilder(work_dir)
+    map_text = builder.build()
+    file_count, symbol_count = builder.count_symbols()
+    summary = f"Discovered {symbol_count} symbols across {file_count} files in {work_dir}\n\n"
+    return summary + map_text
+
+
+async def _handle_conflicts(console: AuraCodeConsole, args: str) -> str | None:
+    """List files in the current workspace with active Git conflict markers."""
+    from pathlib import Path
+
+    from auracode.git.conflict_resolver import ConflictMarkerParser
+
+    work_dir = console.session.working_directory if console.session else "."
+    conflicted = ConflictMarkerParser.find_conflicted_files(work_dir)
+    if not conflicted:
+        return "No active Git merge conflicts detected."
+
+    lines = [f"Found {len(conflicted)} conflicted file(s):"]
+    root_p = Path(work_dir).resolve()
+    for p in conflicted:
+        lines.append(f"  - {p.relative_to(root_p).as_posix()}")
+    lines.append("\nResolve with: /resolve-conflicts [file]")
+    return "\n".join(lines)
+
+
+async def _handle_resolve_conflicts(console: AuraCodeConsole, args: str) -> str | None:
+    """Resolve merge conflicts using AI synthesis."""
+    from pathlib import Path
+
+    from auracode.git.conflict_resolver import (
+        ConflictMarkerParser,
+        MergeConflictResolver,
+    )
+
+    work_dir = console.session.working_directory if console.session else "."
+    resolver = MergeConflictResolver(console.engine)
+
+    target = args.strip()
+    if target:
+        target_path = Path(work_dir) / target
+        _success, msg = await resolver.resolve_file(target_path)
+        return msg
+
+    conflicted = ConflictMarkerParser.find_conflicted_files(work_dir)
+    if not conflicted:
+        return "No active Git merge conflicts detected."
+
+    results: list[str] = []
+    for p in conflicted:
+        success, msg = await resolver.resolve_file(p)
+        tag = "RESOLVED" if success else "FAILED"
+        results.append(f"[{tag}] {p.name}: {msg}")
+    return "\n".join(results)
+
+
+async def _handle_commit(console: AuraCodeConsole, args: str) -> str | None:
+    """Synthesize conventional commit message and commit staged changes."""
+    from auracode.git.commit_synthesizer import CommitSynthesizer
+
+    work_dir = console.session.working_directory if console.session else "."
+    synthesizer = CommitSynthesizer(console.engine)
+    push = "--push" in args.split()
+    custom_msg = args.replace("--push", "").strip() or None
+
+    _success, output = await synthesizer.commit_staged(
+        repo_path=work_dir,
+        message=custom_msg,
+        push=push,
+    )
+    status_tag = "SUCCESS" if _success else "FAILED"
+    return f"[Commit {status_tag}]\n{output}"
+
+
+async def _handle_bundle(console: AuraCodeConsole, args: str) -> str | None:
+    """Manage AuraGrid application bundles (.aurabundle)."""
+    from pathlib import Path
+
+    from auracode.bundle.manifest import ManifestValidator
+    from auracode.bundle.packager import BundlePackager
+
+    parts = args.strip().split()
+    subcmd = parts[0] if parts else "help"
+
+    if subcmd == "pack":
+        src = (
+            parts[1]
+            if len(parts) > 1
+            else (console.session.working_directory if console.session else ".")
+        )
+        out = parts[2] if len(parts) > 2 else f"{Path(src).resolve().name}.aurabundle"
+        try:
+            packed = BundlePackager.pack(src, out)
+            return f"Bundle created: {packed}"
+        except Exception as exc:
+            return f"Bundle pack failed: {exc}"
+
+    if subcmd == "validate":
+        target = parts[1] if len(parts) > 1 else "app.manifest.json"
+        p = Path(target).resolve()
+        if p.suffix in (".aurabundle", ".zip"):
+            try:
+                info = BundlePackager.inspect(p)
+                return f"Bundle valid: {info['name']} v{info['version']} ({info['sha256'][:16]}...)"
+            except Exception as exc:
+                return f"Bundle invalid: {exc}"
+        else:
+            is_valid, errors = ManifestValidator.validate_file(p)
+            if is_valid:
+                return f"Manifest valid: {p.name}"
+            return "Manifest errors:\n" + "\n".join(f"  - {e}" for e in errors)
+
+    if subcmd == "inspect":
+        target = parts[1] if len(parts) > 1 else "auracode.aurabundle"
+        try:
+            info = BundlePackager.inspect(target)
+            return (
+                f"Bundle: {info['name']} v{info['version']} ({info['app_id']})\n"
+                f"SHA256: {info['sha256']}\n"
+                f"Files ({info['file_count']}):\n  " + "\n  ".join(info["files"][:10])
+            )
+        except Exception as exc:
+            return f"Inspect failed: {exc}"
+
+    return "Usage: /bundle [pack [src] [out] | validate [target] | inspect [bundle]]"
+
+
+async def _handle_mas_status(console: AuraCodeConsole, args: str) -> str | None:
+    """Show node-local MAS registration status and advertised MCP tools."""
+    from auracode.grid.mas_agent import DEFAULT_MAS_ENDPOINT
+
+    mas_ep = getattr(console.engine.config, "mas_endpoint", None) or DEFAULT_MAS_ENDPOINT
+    tools = [
+        "auracode_act",
+        "auracode_repomap",
+        "auracode_conflicts",
+        "auracode_resolve_conflicts",
+        "auracode_rollback",
+        "auracode_synthesize_commit",
+        "auracode_bundle_pack",
+        "auracode_bundle_validate",
+    ]
+    lines = [
+        "",
+        "Node-Local Multi-Agent System (MAS) Status",
+        f"  MAS Endpoint:     {mas_ep}",
+        "  Role:             code-engine",
+        "  Advertised MCP Tools:",
+    ]
+    for t in tools:
+        lines.append(f"    - {t}")
+    lines.append("")
+    lines.append("MAS integration is ready for grid prototype-generation and governance.")
+    return "\n".join(lines)
+
+
+async def _handle_grid_mirror(console: AuraCodeConsole, args: str) -> str | None:
+    """Manage distributed bare Git mirrors on AuraGrid cluster storage."""
+    from pathlib import Path
+
+    from auracode.git.grid_mirror import GridMirrorOrchestrator
+
+    parts = args.strip().split()
+    subcmd = parts[0] if parts else "status"
+
+    default_storage = getattr(console.engine.config, "grid_storage_mirrors_path", None) or str(
+        Path.home() / ".auracode" / "grid_mirrors"
+    )
+
+    if subcmd == "init":
+        app_id = parts[1] if len(parts) > 1 else "auracode"
+        storage = parts[2] if len(parts) > 2 else default_storage
+        try:
+            m_path = GridMirrorOrchestrator.init_grid_mirror(app_id, storage)
+            return f"Initialized shared grid mirror: {m_path}"
+        except Exception as exc:
+            return f"Failed to init grid mirror: {exc}"
+
+    if subcmd == "sync":
+        if len(parts) < 3:
+            return "Usage: /grid-mirror sync <mirror_path> <local_target>"
+        mirror_p = parts[1]
+        local_t = parts[2]
+        try:
+            ok = GridMirrorOrchestrator.sync_mirror_to_node(mirror_p, local_t)
+            return f"Sync {'succeeded' if ok else 'failed'} from {mirror_p} to {local_t}"
+        except Exception as exc:
+            return f"Sync error: {exc}"
+
+    if subcmd == "status":
+        mirror_p = parts[1] if len(parts) > 1 else str(Path(default_storage) / "auracode.git")
+        info = GridMirrorOrchestrator.get_mirror_info(mirror_p)
+        if not info.get("exists"):
+            return f"Grid mirror not found at {mirror_p}"
+        return (
+            f"Grid Mirror: {info['path']}\n"
+            f"  HEAD Ref:       {info['head_ref']}\n"
+            f"  Latest Commit:  {info['latest_commit']}"
+        )
+
+    return (
+        "Usage: /grid-mirror [init <app_id> [storage_path] | "
+        "sync <mirror> <target> | status [mirror]]"
+    )
+
+
+async def _handle_xlm_benchmark(console: AuraCodeConsole, args: str) -> str | None:
+    """Benchmark AuraXLM neural retrieval endpoint connectivity and latency."""
+    import time
+
+    import httpx
+
+    xlm_ep = getattr(console.engine.config, "auraxlm_endpoint", None)
+    if not xlm_ep:
+        return (
+            "AuraXLM endpoint not configured.\n"
+            "Connect AuraXLM on AuraGrid to enable neural vector search and cross-encoder "
+            "semantic indexing.\n"
+            "Set 'auraxlm_endpoint' in auracode.yaml or config."
+        )
+
+    t0 = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{xlm_ep.rstrip('/')}/health")
+        latency_ms = int((time.time() - t0) * 1000)
+        status = "HEALTHY" if resp.is_success else f"HTTP {resp.status_code}"
+        return (
+            f"AuraXLM Benchmark Report\n"
+            f"  Endpoint: {xlm_ep}\n"
+            f"  Status:   {status}\n"
+            f"  Latency:  {latency_ms}ms\n"
+            f"  Mode:     Distributed Neural Vector Indexing"
+        )
+    except Exception as exc:
+        latency_ms = int((time.time() - t0) * 1000)
+        return (
+            f"AuraXLM Benchmark Report\n"
+            f"  Endpoint: {xlm_ep}\n"
+            f"  Status:   UNREACHABLE ({exc})\n"
+            f"  Latency:  {latency_ms}ms"
+        )
+
+
 def register_builtin_commands() -> None:
     """Register all built-in slash commands."""
     _COMMANDS.clear()
@@ -549,5 +906,87 @@ def register_builtin_commands() -> None:
     register(SlashCommand("spend", "Show agentic spend and budget limits", _handle_spend))
     register(
         SlashCommand("permissions", "View or set local permissions", _handle_permissions, ["perms"])
+    )
+    register(
+        SlashCommand(
+            "act",
+            "Run autonomous self-healing agent loop",
+            _handle_act,
+            ["agent"],
+        )
+    )
+    register(
+        SlashCommand(
+            "verify",
+            "Run verification test or build command",
+            _handle_verify,
+        )
+    )
+    register(
+        SlashCommand(
+            "rollback",
+            "Revert files to previous snapshot",
+            _handle_rollback,
+            ["undo"],
+        )
+    )
+    register(
+        SlashCommand(
+            "repomap",
+            "Show structural AST repo-map",
+            _handle_repomap,
+            ["map"],
+        )
+    )
+    register(
+        SlashCommand(
+            "conflicts",
+            "List files with active merge conflicts",
+            _handle_conflicts,
+        )
+    )
+    register(
+        SlashCommand(
+            "resolve-conflicts",
+            "Resolve 3-way merge conflicts using AI",
+            _handle_resolve_conflicts,
+            ["resolve"],
+        )
+    )
+    register(
+        SlashCommand(
+            "commit",
+            "Synthesize conventional commit and commit staged",
+            _handle_commit,
+        )
+    )
+    register(
+        SlashCommand(
+            "bundle",
+            "Manage AuraGrid application bundles",
+            _handle_bundle,
+        )
+    )
+    register(
+        SlashCommand(
+            "mas-status",
+            "Show node-local MAS status and MCP tools",
+            _handle_mas_status,
+            ["mas"],
+        )
+    )
+    register(
+        SlashCommand(
+            "grid-mirror",
+            "Manage distributed Git bare mirrors",
+            _handle_grid_mirror,
+        )
+    )
+    register(
+        SlashCommand(
+            "xlm-benchmark",
+            "Benchmark AuraXLM retrieval latency",
+            _handle_xlm_benchmark,
+        )
     )
     register(SlashCommand("quit", "Exit AuraCode", _handle_quit, ["q", "exit"]))

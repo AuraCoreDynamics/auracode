@@ -2,6 +2,9 @@ include README.md
 include LICENSE
 include CLAUDE.md
 include auracode.yaml
+include app.manifest.json
+recursive-include docs *.md
 recursive-include src/auracode/grid/proto *.proto
 recursive-include src/auracode/assets *.gguf
+recursive-include src/auracode/assets/ui *
 include src/auracode/py.typed

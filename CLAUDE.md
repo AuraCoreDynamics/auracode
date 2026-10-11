@@ -77,29 +77,51 @@ src/auracode/
     console.py             # AuraCodeConsole — interactive REPL loop
     commands.py            # Slash-command registry and built-in handlers
   routing/
-    base.py                # BaseRouterBackend ABC, ModelInfo, ServiceInfo, AnalyzerInfo, RouteResult
+    base.py                # BaseRouterBackend ABC, ModelInfo, ServiceInfo, RouteResult
     embedded.py            # EmbeddedRouterBackend (wraps AuraRouter ComputeFabric)
     intent_map.py          # INTENT_ROLE_MAP, map_intent_to_role(), build_context_prompt()
+    auraxlm_hook.py        # AuraXLM enterprise neural retrieval client & fallback hook
     mcp_catalog.py         # McpCatalogClient, ToolInfo
   engine/
-    core.py                # AuraCodeEngine (execute, get_session, close_session)
+    core.py                # AuraCodeEngine (execute, execute_loop, session orchestration)
+    agent_loop.py          # AgenticExecutionLoop (self-healing, bounded 3-turn budget)
+    repo_map.py            # RepoMapBuilder (zero-vector deterministic AST map <2KB)
     session.py             # SessionManager (in-memory dict, UUID generation)
     registry.py            # AdapterRegistry, BackendRegistry
     preferences.py         # PreferencesManager (load/save YAML prefs)
+    fleet_manager.py       # FleetWorkspaceManager (multi-project workspace orchestration)
+  bundle/
+    manifest.py            # AppManifest and CellGovernanceSpec validation
+    packager.py            # BundlePackager (.aurabundle archive packaging & inspection)
+  git/
+    mirror_service.py      # GitMirrorService (bare mirror management)
+    grid_mirror.py         # GridMirrorOrchestrator (distributed bare mirrors on AuraGrid)
+    poller.py              # GitMirrorPoller (background push poller with preflight gate)
+    conflict_resolver.py   # ConflictMarkerParser and MergeConflictResolver (3-way merge)
+    commit_synthesizer.py  # CommitSynthesizer (conventional commits from staged diffs)
   shim/
     server.py              # create_app(), start_server(), start_server_daemon()
+    event_bus.py           # MissionEventBus (WebSocket telemetry streaming)
+    ui_endpoints.py        # REST and WebSocket handlers for Mission Command deck
+    ide_protocol.py        # IDE Protocol V1/V2 schemas (act, repo-map, conflicts)
+    ide_websocket.py       # IDE WebSocket transport for VS and companion extensions
     openai_compat.py       # chat_completions(), completions() handlers
     models_endpoint.py     # list_models() handler
-    middleware.py           # error_middleware, logging_middleware, CORS
+    middleware.py          # error_middleware, logging_middleware, CORS
+  assets/
+    ui/                    # Mission Command single-page dark-mode web application
+      index.html           # Flight deck layout & workspace switcher
+      styles.css           # Glassmorphic CSS design tokens
+      app.js               # Vanilla JS reactive controller & WebSocket client
   grid/
-    client.py              # GridDelegateBackend (gRPC with mTLS, fully implemented)
+    client.py              # GridDelegateBackend (gRPC with mTLS)
     failover.py            # FailoverBackend (primary -> fallback)
-    serializer.py          # engine_request_to_grid(), grid_response_to_route_result()
-    messages.py            # Pure Python dataclasses mirroring proto messages
-    proto/
-      auracode_grid.proto  # Protobuf service definition (Execute, ExecuteStream, HealthCheck, ListModels)
+    lifecycle_client.py    # LifecycleManagementClient (trigger app restart)
+    mas_agent.py           # NodeMasAgentClient (registers reverse-MCP with node-local MAS)
+    serializer.py          # Serialization between engine and grid protobufs
   util/
     logging.py             # configure_logging() via structlog
+    journal.py             # FileJournal with transactional snapshots & rollback
 ```
 
 ## Conventions
@@ -110,7 +132,8 @@ src/auracode/
 - ABCs use `@abstractmethod`; no default implementations.
 - `async def` throughout the engine and routing layers.
 - structlog for structured logging.
-- Adapters are subpackages under `adapters/` with a `register(registry)` entry point. All 5 adapters (opencode, claude-code, copilot, aider, codestral) plus the openai_shim are fully implemented and wired to the engine.
+- Adapters are subpackages under `adapters/` with a `register(registry)` entry point.
+- Zero local vector database or ML embedding dependencies in AuraCode core (pure AST repo-map; neural search delegates to AuraXLM).
 - Optional dependencies are grouped: `[api]` for aiohttp, `[grid]` for gRPC, `[all]` for everything.
 - Graceful degradation: missing optional packages produce helpful errors, not crashes.
 
@@ -124,6 +147,7 @@ Config lookup chain: `--config` flag > `./auracode.yaml` > `~/.auracode.yaml` > 
 | `default_adapter` | `str` | `"opencode"` | Adapter used when none specified |
 | `log_level` | `str` | `"INFO"` | Logging verbosity |
 | `grid_endpoint` | `str \| null` | `null` | AuraGrid gRPC endpoint |
+| `auraxlm_endpoint` | `str \| null` | `null` | AuraXLM neural retrieval endpoint |
 | `grid_failover_to_local` | `bool` | `true` | Fall back to local if grid unavailable |
 | `local_context_limit` | `int` | `100000` | Token threshold for grid delegation |
 | `adapters` | `dict` | `{}` | Per-adapter configuration blocks |
@@ -300,18 +324,45 @@ Persistent preferences stored in `~/.auracode/preferences.yaml`, managed by `Pre
 
 ## Relationship to AuraCore Ecosystem
 
-AuraCode sits atop three AuraCore systems:
+AuraCode anchors the developer experience in the 4-tier AuraCore architecture:
 
-- **AuraRouter** (open source, Apache-2.0) — Multi-model MCP routing fabric. AuraCode embeds it as the `EmbeddedRouterBackend`. Handles model selection, fallback chains, cost optimization, and intent analysis. Models: Ollama, llama.cpp, Claude, Gemini, OpenAI-compatible.
-- **AuraGrid** (proprietary) — Federated compute fabric. AuraCode delegates heavy requests via gRPC (`GridDelegateBackend`). Auction-based resource allocation, event-sourced durability, split-brain resilient, mTLS-secured. Provides distributed inference for requests that exceed local capacity.
-- **AuraXLM** (proprietary) — Decentralized mixture-of-experts with RAG. When connected via AuraRouter, provides retrieval-augmented generation grounded in your codebase, domain-specific fine-tuned models via Model Foundry, and geospatial intelligence capabilities.
+```
+[AuraCode] (Developer CLI / Headless Agent / Mission Command Deck)
+    │
+    ▼ exposes MCP capabilities via node-local MAS Coordinator (port 8740)
+[AuraRouter] (Model Context Protocol / Federated MoE Routing Fabric)
+    │
+    ▼ delegates neural index queries (<2KB AST locally; full RAG in cloud)
+[AuraXLM] (Domain-Specific Neural Codebase RAG & Model Foundry)
+    │
+    ▼ deploys .aurabundle artifacts & bare Git mirrors with cell governance
+[AuraGrid] (Distributed Sovereign Grid / Auction-Allocated Compute Cells)
+```
 
-AuraCode works standalone — it does not require AuraGrid or AuraXLM. But each layer adds capabilities: AuraRouter adds intelligent routing, AuraGrid adds distributed scale, AuraXLM adds domain-specific knowledge.
+- **AuraRouter** (open source, Apache-2.0) — Multi-model MCP routing fabric embedded
+  via `EmbeddedRouterBackend`. Dynamically classifies coding intents, evaluates
+  sovereignty/latency constraints, and routes prompts to local or frontier models.
+- **AuraXLM** (proprietary) — Neural retrieval and domain-specific code intelligence.
+  AuraCode keeps its core free of local vector databases (AST map strictly under 2KB).
+  When whole-codebase neural indexing is needed, AuraCode delegates retrieval to AuraXLM
+  with structured fallbacks and commercial upsell notices.
+- **AuraGrid** (proprietary) — Federated compute fabric. AuraCode delegates heavy inference
+  via gRPC (`GridDelegateBackend`), distributes bare Git mirrors (`GridMirrorOrchestrator`),
+  and runs pre-flight test suites before triggering live cell restarts.
+- **Node-Local MAS Reverse-MCP Exposure** — When deployed across grid worker nodes, AuraCode
+  runs `NodeMasAgentClient`, registering 21 FastMCP tools (including `auracode_act`,
+  `auracode_repomap`, `auracode_conflicts`, `auracode_rollback`, `auracode_bundle_pack`)
+  with the node-local Multi-Agent System (MAS coordinator at `http://127.0.0.1:8740`).
+- **AI Prototype Generation & Human-in-the-Loop Governance** — This interconnected pipeline
+  allows upstream AI orchestrators to autonomously generate prototypes via headless AuraCode
+  MCP calls, package deterministic `.aurabundle` artifacts with cell governance constraints,
+  and present architects with Mission Command diff review, conflict resolution, and
+  transactional journal rollback before committing to the grid.
 
 ## Testing
 
 ```bash
-# Full suite (360+ tests)
+# Full suite (710+ tests)
 pytest tests/ -x -q
 
 # By component
@@ -322,8 +373,10 @@ pytest tests/test_adapters/ -x -q          # Adapter discovery, Claude Code, Ope
 pytest tests/test_repl/ -x -q              # REPL console, slash commands
 pytest tests/test_routing/ -x -q           # Embedded router, intent map, MCP catalog
 pytest tests/test_shim/ -x -q              # API shim server
-pytest tests/test_grid/ -x -q              # Grid client, failover
-pytest tests/test_integration/ -x -q       # End-to-end bootstrap, CLI, full path
+pytest tests/test_grid/ -x -q              # Grid client, failover, MAS agent
+pytest tests/test_bundle/ -x -q            # .aurabundle packager and manifest validation
+pytest tests/test_git/ -x -q               # Bare mirrors and scratch preflight
+pytest tests/test_integration/ -x -q       # End-to-end bootstrap, CLI, ecosystem integration
 ```
 
 All routing and grid tests are fully mocked — they pass without AuraRouter or AuraGrid installed.

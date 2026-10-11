@@ -64,8 +64,17 @@ def parse_artifact_payload(raw: str) -> ArtifactPayload | None:
     Returns ``None`` if *raw* is not valid JSON or does not conform to
     the expected schema.  Does **not** raise on non-JSON content.
     """
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
     try:
-        data = json.loads(raw)
+        data = json.loads(text)
     except (json.JSONDecodeError, TypeError):
         return None
 

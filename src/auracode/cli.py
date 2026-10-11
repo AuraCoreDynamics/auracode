@@ -126,9 +126,14 @@ def serve(ctx: click.Context, port: int, host: str) -> None:
     async def on_startup(_app: web.Application) -> None:
         task = asyncio.create_task(registrar.start_with_retry())
         task.add_done_callback(
-            lambda t: t.exception() and __import__("logging").getLogger(__name__).error(
-                "Catalog registration task failed: %s", t.exception()
-            ) if not t.cancelled() and t.exception() else None
+            lambda t: (
+                t.exception()
+                and __import__("logging")
+                .getLogger(__name__)
+                .error("Catalog registration task failed: %s", t.exception())
+                if not t.cancelled() and t.exception()
+                else None
+            )
         )
 
     async def on_shutdown(_app: web.Application) -> None:
@@ -139,6 +144,224 @@ def serve(ctx: click.Context, port: int, host: str) -> None:
     app.on_startup.append(on_startup)
     app.on_shutdown.append(on_shutdown)
     web.run_app(app, host=host, port=port)
+
+
+@main.command()
+@click.option(
+    "--preflight-command",
+    "-p",
+    default=None,
+    help="Verification command to execute before triggering lifecycle restarts.",
+)
+@click.pass_context
+def poller(ctx: click.Context, preflight_command: str | None) -> None:
+    """Start the Git post-receive poller for collaborative offline coding."""
+    import time
+
+    from auracode.git.mirror_service import GitMirrorService
+    from auracode.git.poller import GitMirrorPoller
+    from auracode.grid.lifecycle_client import LifecycleManagementClient
+
+    mirror = GitMirrorService()
+    client = LifecycleManagementClient()
+    poller = GitMirrorPoller(
+        mirror,
+        client,
+        preflight_command=preflight_command,
+    )
+
+    click.echo("Starting AuraCode Git poller...")
+    poller.start()
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        click.echo("Stopping AuraCode Git poller...")
+        poller.stop()
+
+
+@main.command()
+@click.option("--port", default=8741, help="Port for Mission Command web UI")
+@click.option("--host", default="127.0.0.1", help="Bind address")
+@click.option("--open-browser", is_flag=True, default=False, help="Open browser on start")
+@click.option("--auth-token", default=None, help="Bearer token required for API and remote UI")
+@click.pass_context
+def ui(
+    ctx: click.Context,
+    port: int,
+    host: str,
+    open_browser: bool,
+    auth_token: str | None,
+) -> None:
+    """Launch the Mission Command Web Flight Deck."""
+    try:
+        import aiohttp.web as web  # noqa: F401
+    except ImportError:
+        click.echo(
+            "Error: Mission Command UI requires 'aiohttp'. Install with: pip install auracode[api]"
+        )
+        raise SystemExit(1)
+
+    import webbrowser
+
+    from auracode.app import create_application
+    from auracode.shim.server import create_app
+
+    engine, _, _, _ = create_application(ctx.obj.get("config_path"))
+    if auth_token:
+        engine.config.auth_token = auth_token
+
+    app = create_app(engine)
+    ui_url = f"http://{host}:{port}/ui"
+    click.echo(f"AuraCode Mission Command running at {ui_url}")
+
+    if open_browser:
+        webbrowser.open(ui_url)
+
+    import aiohttp.web as web
+
+    web.run_app(app, host=host, port=port)
+
+
+@main.group()
+def fleet() -> None:
+    """Manage multi-project workspaces in Mission Command."""
+
+
+@fleet.command("add")
+@click.argument("path", type=click.Path(exists=True, file_okay=False, dir_okay=True))
+def fleet_add(path: str) -> None:
+    """Register a new workspace directory."""
+    from auracode.engine.fleet_manager import FleetWorkspaceManager
+
+    mgr = FleetWorkspaceManager()
+    info = mgr.register(path)
+    click.echo(f"Registered workspace: {info['name']} ({info['path']}) [branch: {info['branch']}]")
+
+
+@fleet.command("remove")
+@click.argument("path", type=click.Path())
+def fleet_remove(path: str) -> None:
+    """Unregister a workspace directory."""
+    from auracode.engine.fleet_manager import FleetWorkspaceManager
+
+    mgr = FleetWorkspaceManager()
+    if mgr.unregister(path):
+        click.echo(f"Unregistered workspace: {path}")
+    else:
+        click.echo(f"Workspace not found in fleet: {path}", err=True)
+
+
+@fleet.command("list")
+def fleet_list() -> None:
+    """List all registered workspaces."""
+    import asyncio
+
+    from auracode.engine.fleet_manager import FleetWorkspaceManager
+
+    mgr = FleetWorkspaceManager()
+    workspaces = asyncio.run(mgr.list_workspaces())
+    click.echo(f"Registered Workspaces ({len(workspaces)}):")
+    for ws in workspaces:
+        status_flag = "DIRTY" if ws["dirty"] else "CLEAN"
+        conflict_flag = f" [conflicts: {ws['conflict_count']}]" if ws["conflict_count"] > 0 else ""
+        click.echo(
+            f"  - {ws['name']:<20} {ws['path']} ({ws['branch']}) [{status_flag}]{conflict_flag}"
+        )
+
+
+@main.group()
+def bundle() -> None:
+    """Manage AuraGrid application bundles (.aurabundle)."""
+
+
+@bundle.command("pack")
+@click.option(
+    "--source",
+    "-s",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    default=".",
+    help="Source directory containing app.manifest.json.",
+)
+@click.option(
+    "--out",
+    "-o",
+    type=click.Path(),
+    default=None,
+    help="Output .aurabundle archive path.",
+)
+def bundle_pack(source: str, out: str | None) -> None:
+    """Pack an application directory into a sealed .aurabundle archive."""
+    from pathlib import Path
+
+    from auracode.bundle.packager import BundlePackager
+
+    src_path = Path(source).resolve()
+    out_path = Path(out).resolve() if out else src_path / f"{src_path.name}.aurabundle"
+    try:
+        res = BundlePackager.pack(source_dir=src_path, output_file=out_path)
+        click.echo(f"Successfully packed bundle: {res}")
+    except Exception as exc:
+        click.echo(f"Error packing bundle: {exc}", err=True)
+        raise SystemExit(1)
+
+
+@bundle.command("validate")
+@click.argument("target", default="app.manifest.json", type=click.Path(exists=True))
+def bundle_validate(target: str) -> None:
+    """Validate an app.manifest.json file or .aurabundle archive."""
+    from pathlib import Path
+
+    from auracode.bundle.manifest import ManifestValidator
+    from auracode.bundle.packager import BundlePackager
+
+    path = Path(target).resolve()
+    if path.suffix in (".aurabundle", ".zip"):
+        try:
+            info = BundlePackager.inspect(path)
+            gov = info.get("cell_governance", {})
+            click.echo(f"Bundle is valid: {info['name']} v{info['version']} ({info['app_id']})")
+            click.echo(f"  SHA-256: {info['sha256']}")
+            click.echo(f"  Files: {info['file_count']}")
+            click.echo(f"  Target cells: {', '.join(gov.get('target_cells', [])) or 'any'}")
+            click.echo(f"  Required OS: {gov.get('required_os', 'any')}")
+            click.echo(f"  Min RAM: {gov.get('min_ram_mb', 512)} MB")
+        except Exception as exc:
+            click.echo(f"Invalid bundle: {exc}", err=True)
+            raise SystemExit(1)
+    else:
+        is_valid, errors = ManifestValidator.validate_file(path)
+        if is_valid:
+            click.echo(f"Manifest {path.name} is valid.")
+        else:
+            click.echo(f"Manifest {path.name} has errors:", err=True)
+            for err in errors:
+                click.echo(f"  - {err}", err=True)
+            raise SystemExit(1)
+
+
+@bundle.command("inspect")
+@click.argument("bundle_path", type=click.Path(exists=True))
+def bundle_inspect(bundle_path: str) -> None:
+    """Inspect the contents and governance requirements of a bundle."""
+    from pathlib import Path
+
+    from auracode.bundle.packager import BundlePackager
+
+    path = Path(bundle_path).resolve()
+    try:
+        info = BundlePackager.inspect(path)
+        click.echo(f"Bundle: {info['name']} (ID: {info['app_id']}, Version: {info['version']})")
+        click.echo(f"SHA-256: {info['sha256']}")
+        click.echo(f"Files ({info['file_count']}):")
+        for f in info["files"][:20]:
+            click.echo(f"  - {f}")
+        if len(info["files"]) > 20:
+            click.echo(f"  ... and {len(info['files']) - 20} more")
+    except Exception as exc:
+        click.echo(f"Error inspecting bundle: {exc}", err=True)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -636,6 +636,7 @@ src/auracode/
     context.py             # SessionContext, FileContext
     config.py              # AuraCodeConfig
     preferences.py         # UserPreferences (persistent prefs model)
+    verification.py        # VerificationCommand, RemediationBudget, AgentLoopResult
   adapters/
     base.py                # BaseAdapter ABC
     loader.py              # Auto-discovery of adapter subpackages
@@ -651,40 +652,181 @@ src/auracode/
     console.py             # AuraCodeConsole — interactive REPL loop
     commands.py            # Slash-command registry and built-in handlers
   routing/
-    base.py                # BaseRouterBackend ABC, ModelInfo, ServiceInfo, AnalyzerInfo, RouteResult
+    base.py                # BaseRouterBackend ABC, ModelInfo, ServiceInfo, RouteResult
     embedded.py            # EmbeddedRouterBackend (wraps AuraRouter)
     intent_map.py          # Intent-to-role mapping and context building
+    auraxlm_hook.py        # AuraXLM enterprise neural retrieval client & fallback hook
     mcp_catalog.py         # MCP tool catalog client
   engine/
     core.py                # AuraCodeEngine — central orchestrator
+    agent_loop.py          # AgenticExecutionLoop — bounded self-healing loop
+    repo_map.py            # RepoMapBuilder — zero-vector deterministic AST map (<2KB)
     session.py             # SessionManager — in-memory conversation state
     registry.py            # AdapterRegistry, BackendRegistry
     preferences.py         # PreferencesManager (load/save YAML prefs)
+  git/
+    mirror_service.py      # Git bare mirror repository management
+    poller.py              # GitMirrorPoller with pre-flight deployment gates
+    conflict_resolver.py   # ConflictMarkerParser and AI 3-way merge resolver
+    commit_synthesizer.py  # Conventional commit generator from staged diffs
   shim/
     server.py              # aiohttp application factory and server launchers
+    event_bus.py           # MissionEventBus — WebSocket telemetry stream
+    ui_endpoints.py        # REST and WebSocket handlers for Mission Command deck
     openai_compat.py       # /v1/chat/completions and /v1/completions handlers
     models_endpoint.py     # /v1/models handler
-    middleware.py           # Error handling, logging, CORS
+    middleware.py          # Error handling, logging, CORS
+  assets/
+    ui/                    # Mission Command dark-mode glassmorphic web UI
+      index.html           # Single-page operations flight deck
+      styles.css           # Vanilla CSS glassmorphic design tokens
+      app.js               # Vanilla JS reactive controller & WebSocket client
   grid/
     client.py              # GridDelegateBackend (gRPC to AuraGrid)
     failover.py            # FailoverBackend (grid -> local fallback)
-    serializer.py          # Request/response serialization for gRPC
-    messages.py            # Pure Python proto message classes
-    proto/
-      auracode_grid.proto  # Protobuf service definition
+    lifecycle_client.py    # Lifecycle management client for app restarts
   util/
     logging.py             # structlog configuration
+    journal.py             # FileJournal with transactional snapshots & rollback
 tests/
   conftest.py              # Shared fixtures, mock backends
   test_models.py           # Domain model tests
-  test_engine.py           # Engine, session, registry tests
-  test_preferences.py      # UserPreferences and PreferencesManager tests
-  test_adapters/           # Adapter discovery, Claude Code, and OpenCode tests
-  test_repl/               # REPL console and slash-command tests
-  test_routing/            # Embedded router, intent mapping, MCP catalog tests
-  test_shim/               # API shim server tests
-  test_grid/               # Grid client and failover tests
-  test_integration/        # End-to-end bootstrap, CLI, and full-path tests
+  test_engine/             # Agent loop and AST repo-map unit tests
+  test_git/                # Pre-flight poller, conflict resolver, commit synthesizer tests
+  test_shim/               # WebSocket event bus, UI endpoints, API shim tests
+  test_integration/        # Mission Command end-to-end integration tests
+```
+
+---
+
+## Mission Command & Autonomous Orchestration
+
+AuraCode provides an architectural **Mission Command Deck** (`auracode ui`) — a command-and-control operations cockpit designed for an architect directing specialized agents across multiple projects and repositories simultaneously, verifying deterministic outcomes, resolving offline Git merge conflicts, and observing verification evidence.
+
+```
+                      ┌────────────────────────────────────────┐
+                      │    AURACODE MISSION COMMAND FLIGHT DECK│
+                      │  (Dark-Mode Glassmorphic Local Web UI) │
+                      └──────────────────┬─────────────────────┘
+                                         │ WebSocket / REST (:8741)
+                      ┌──────────────────▼─────────────────────┐
+                      │      MissionEventBus & UI Engine       │
+                      └───────┬──────────────────────┬─────────┘
+                              │                      │
+          ┌───────────────────▼───────┐  ┌───────────▼────────────────┐
+          │ Autonomous Agent Loop     │  │ Collaborative Git Engine   │
+          │ • Bounded 3-Turn Budget   │  │ • Pre-Flight Test Gate     │
+          │ • Transactional Snapshot  │  │ • 3-Way Merge Resolver     │
+          │ • Rollback Journal        │  │ • Conventional Commit Syn  │
+          └───────────┬───────────────┘  └────────────────────────────┘
+                      │
+          ┌───────────▼───────────────┐
+          │ Codebase Context Layer    │
+          │ • Free AST Repo-Map (<2KB)│
+          │ • AuraXLM Neural Hook     │
+          └───────────────────────────┘
+```
+
+### CLI Commands
+
+```bash
+# Launch Mission Command Web Deck (local port 8741)
+auracode ui --port 8741 --open-browser
+
+# Start Git post-receive poller with pre-flight verification gate
+auracode poller --preflight-command "pytest tests/"
+```
+
+### REPL Slash Commands
+
+- `/act [PROMPT] [--verify CMD]`: Runs the autonomous agent loop with a bounded 3-turn self-healing budget.
+- `/verify [COMMAND]`: Runs verification test command and reports outcome.
+- `/rollback [SNAPSHOT_ID]`: Restores files back to the pre-run snapshot checkpoint.
+- `/repomap`: Displays the current workspace's zero-vector AST architectural map.
+- `/conflicts`: Lists all files in the current workspace with active Git merge conflict markers.
+- `/resolve-conflicts [PATH]`: Reconciles merge conflicts using AI semantic synthesis.
+- `/commit [--push]`: Synthesizes a conventional commit message from staged changes.
+- `/bundle [pack|validate|inspect]`: Manages `.aurabundle` packages and manifests.
+- `/mas-status`: Inspects node-local MAS coordinator status and reverse-MCP tools.
+- `/grid-mirror [init|sync|status]`: Manages distributed Git bare mirrors on AuraGrid.
+- `/xlm-benchmark`: Measures local AST repo-map vs. AuraXLM remote neural retrieval latency.
+
+---
+
+## Grid Architecture & Ecosystem Pipeline
+
+AuraCode anchors the developer and agent operations tier in the four-tier AuraCore stack:
+
+```
+[AuraCode] (Developer CLI / Headless Agent / Mission Command Deck)
+    │
+    ▼ Exposes FastMCP tools via node-local MAS Coordinator (:8740)
+[AuraRouter] (Model Context Protocol / Federated MoE Routing Fabric)
+    │
+    ▼ Queries whole-codebase neural indexes (<2KB AST locally; RAG in cloud)
+[AuraXLM] (Domain-Specific Neural Codebase RAG & Model Foundry)
+    │
+    ▼ Packages .aurabundle artifacts & bare mirrors with cell governance
+[AuraGrid] (Distributed Sovereign Grid / Auction-Allocated Compute Cells)
+```
+
+### 1. Node-Local MAS & Reverse-MCP Grid Exposure
+When deployed across AuraGrid worker nodes, AuraCode functions as an autonomous coding
+specialist agent. It starts a `NodeMasAgentClient` that registers 21 FastMCP tools with the
+node-local Multi-Agent System (MAS coordinator at `http://127.0.0.1:8740`).
+Available MCP tools include:
+- `auracode_act`: Headless execution of multi-turn code generation with test verification.
+- `auracode_repomap`: Instant AST-based repository architecture map (<2KB context footprint).
+- `auracode_conflicts` & `auracode_resolve_conflicts`: Autonomous 3-way merge conflict resolution.
+- `auracode_rollback`: Transactional rollback to pre-run snapshot checkpoints.
+- `auracode_synthesize_commit`: Synthesizing conventional commits from staged diffs.
+- `auracode_bundle_pack` & `auracode_bundle_validate`: Packaging and verifying `.aurabundle`.
+
+### 2. Upstream AI Prototype Generation & Human-in-the-Loop Governance
+This pipeline establishes the exact substrate required for autonomous prototype generation:
+- **Headless Prototyping**: AI orchestrators drive AuraCode through node-local MCP tools to
+  scaffold repositories, write modules, and verify unit tests.
+- **Deterministic Bundles**: Prototypes are packaged into cryptographic `.aurabundle` tarballs
+  with strict `CellGovernanceSpec` constraints (CPU/RAM caps, network isolation, cell affinity).
+- **Human-in-the-Loop Governance**: Before grid deployment, architects inspect real-time diffs,
+  resolve conflicts, and approve merges via the Mission Command Deck or IDE bridges, with
+  instant one-click journal rollback if verification criteria are not met.
+
+### 3. Distributed Git Bare Mirrors & Scratch Pre-Flight
+- Bare Git mirrors (`auracode_bare_mirror.git`) are replicated across grid worker nodes tracking
+  `refs/heads/main`.
+- `GitMirrorPoller` performs pre-flight test suites in isolated scratch clones before triggering
+  live cell lifecycle restarts.
+
+### 4. Fleet Management & Multi-Project Operations
+Manage and switch between projects from the CLI or the Mission Command Deck:
+
+```bash
+# Register workspace
+auracode fleet add my-project /path/to/project
+
+# List registered workspaces
+auracode fleet list
+
+# Unregister workspace
+auracode fleet remove my-project
+
+# Launch UI with token authentication
+auracode ui --port 8741 --auth-token "secret-token-123"
+```
+
+### 5. Application Bundling
+Package and validate AuraGrid applications:
+
+```bash
+# Validate app.manifest.json with path traversal defense
+auracode bundle validate app.manifest.json
+
+# Pack application into an .aurabundle archive
+auracode bundle pack app.manifest.json dist/my-app.aurabundle
+
+# Inspect bundle contents and SHA-256 digest
+auracode bundle inspect dist/my-app.aurabundle
 ```
 
 ## Development

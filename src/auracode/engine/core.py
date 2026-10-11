@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -18,6 +19,14 @@ from auracode.models.request import (
     ExecutionMode,
 )
 from auracode.routing.base import BaseRouterBackend
+from auracode.utils.journal import FileJournal
+
+if TYPE_CHECKING:
+    from auracode.models.verification import (
+        AgentLoopResult,
+        RemediationBudget,
+        VerificationCommand,
+    )
 
 log = structlog.get_logger()
 
@@ -25,10 +34,17 @@ log = structlog.get_logger()
 class AuraCodeEngine:
     """Core engine that ties routing, sessions, and adapters together."""
 
-    def __init__(self, config: AuraCodeConfig, router: BaseRouterBackend) -> None:
+    def __init__(
+        self,
+        config: AuraCodeConfig,
+        router: BaseRouterBackend,
+        event_bus: Any | None = None,
+    ) -> None:
         self.config = config
         self.router = router
+        self.event_bus = event_bus
         self.session_manager = SessionManager()
+        self._journal = FileJournal()
 
     async def execute(self, request: EngineRequest) -> EngineResponse:
         """Process an EngineRequest end-to-end.
@@ -76,8 +92,8 @@ class AuraCodeEngine:
             # add a multi-turn loop here if the model returns tool calls that
             # aurarouter doesn't handle.
 
-            # Clear journal before execution
-            if hasattr(self, "_journal"):
+            # Clear journal before execution if not preserving across loop turns
+            if hasattr(self, "_journal") and not request.options.get("_preserve_journal"):
                 self._journal.entries.clear()
 
             route_result = await self.router.route(
@@ -114,6 +130,18 @@ class AuraCodeEngine:
         # Update session history
         self.session_manager.update(session.session_id, request, response, journal=journal_entries)
         return response
+
+    async def execute_loop(
+        self,
+        request: EngineRequest,
+        verification: VerificationCommand | None = None,
+        budget: RemediationBudget | None = None,
+    ) -> AgentLoopResult:
+        """Execute an autonomous self-healing agent loop with verification gates."""
+        from auracode.engine.agent_loop import AgenticExecutionLoop
+
+        loop = AgenticExecutionLoop(self, journal=self._journal, event_bus=self.event_bus)
+        return await loop.run(request, verification=verification, budget=budget)
 
     async def execute_stream(self, request: EngineRequest) -> AsyncIterator[str]:
         """Stream response tokens for an EngineRequest.

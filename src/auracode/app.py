@@ -159,9 +159,17 @@ def create_application(
     adapter_registry = AdapterRegistry()
     discover_adapters(adapter_registry)
 
+    event_bus = None
+    try:
+        from auracode.shim.event_bus import MissionEventBus
+
+        event_bus = MissionEventBus()
+    except Exception as ex:  # noqa: F841
+        log.debug("app.event_bus_not_available", exc_info=True)
+
     # Create engine (needs a backend — use a stub if none available)
     router = backend_registry.get_default() if default_backend else _create_stub_backend()
-    engine = AuraCodeEngine(config, router)
+    engine = AuraCodeEngine(config, router, event_bus=event_bus)
 
     return engine, adapter_registry, backend_registry, preferences_manager
 

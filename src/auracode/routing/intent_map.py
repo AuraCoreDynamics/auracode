@@ -106,41 +106,49 @@ def _format_file(fc: FileContext) -> str:
     return f"{header}\n{body}\n"
 
 
-def build_context_prompt(context: SessionContext | None) -> str:
-    """Build a prompt prefix from session context (files, history, semantics).
+def build_context_prompt(
+    context: SessionContext | None,
+    repo_map: str | None = None,
+) -> str:
+    """Build a prompt prefix from session context (files, history, repo map).
 
-    Returns an empty string when *context* is ``None`` or has no meaningful
-    content.  The total output is hard-capped at :data:`_MAX_CONTEXT_CHARS`
+    Returns an empty string when *context* is ``None`` and *repo_map* is empty.
+    The total output is hard-capped at :data:`_MAX_CONTEXT_CHARS`
     to prevent unbounded prompt growth.
     """
-    if context is None:
+    if context is None and not repo_map:
         return ""
 
     parts: list[str] = []
 
-    # Context semantics — project/sensitivity/diff hints
-    sem_parts: list[str] = []
-    if context.project_id:
-        sem_parts.append(f"Project: {context.project_id}")
-    if context.sensitivity_label:
-        sem_parts.append(f"Sensitivity: {context.sensitivity_label}")
-    if context.changed_files:
-        sem_parts.append(f"Changed files: {', '.join(context.changed_files[:20])}")
-    if context.diff_summary:
-        sem_parts.append(f"Diff summary: {context.diff_summary[:500]}")
-    if context.retrieval_hints:
-        sem_parts.append(f"Retrieval hints: {', '.join(context.retrieval_hints[:10])}")
-    if sem_parts:
-        parts.append("## Context\n" + "\n".join(sem_parts))
+    # Inject codebase architecture map if available
+    if repo_map:
+        parts.append(f"## Architecture Map\n{repo_map}")
 
-    # File contents
-    if context.files:
-        parts.append("## Active Files\n")
-        for fc in context.files:
-            parts.append(_format_file(fc))
+    if context is not None:
+        # Context semantics — project/sensitivity/diff hints
+        sem_parts: list[str] = []
+        if context.project_id:
+            sem_parts.append(f"Project: {context.project_id}")
+        if context.sensitivity_label:
+            sem_parts.append(f"Sensitivity: {context.sensitivity_label}")
+        if context.changed_files:
+            sem_parts.append(f"Changed files: {', '.join(context.changed_files[:20])}")
+        if context.diff_summary:
+            sem_parts.append(f"Diff summary: {context.diff_summary[:500]}")
+        if context.retrieval_hints:
+            sem_parts.append(f"Retrieval hints: {', '.join(context.retrieval_hints[:10])}")
+        if sem_parts:
+            parts.append("## Context\n" + "\n".join(sem_parts))
+
+        # File contents
+        if context.files:
+            parts.append("## Active Files\n")
+            for fc in context.files:
+                parts.append(_format_file(fc))
 
     # Recent conversation history
-    if context.history:
+    if context is not None and context.history:
         parts.append("## Conversation History\n")
         for msg in context.history:
             role = msg.get("role", "user")

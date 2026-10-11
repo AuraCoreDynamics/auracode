@@ -41,6 +41,11 @@ class AuraCodeConfig(BaseModel):
     default_retrieval_mode: str = "disabled"
     default_execution_mode: str = "standard"
     cors_allowed_origins: str = "http://localhost:*"
+    auraxlm_endpoint: str | None = None
+    mas_endpoint: str | None = None
+    workspaces: list[str] = []
+    auth_token: str | None = None
+    grid_storage_mirrors_path: str | None = None
 
     @model_validator(mode="after")
     def _validate_pki_paths(self) -> AuraCodeConfig:

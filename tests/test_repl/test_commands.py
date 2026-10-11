@@ -59,6 +59,17 @@ class TestCommandRegistry:
             "capabilities",
             "permissions",
             "spend",
+            "act",
+            "verify",
+            "rollback",
+            "repomap",
+            "conflicts",
+            "resolve-conflicts",
+            "commit",
+            "bundle",
+            "mas-status",
+            "grid-mirror",
+            "xlm-benchmark",
         }
         actual = {c.name for c in all_commands()}
         assert expected == actual
@@ -476,3 +487,12 @@ class TestUnknownCommand:
         result = await console._dispatch_command("/foobar")
         assert "Unknown command" in result
         assert "/help" in result
+
+    async def test_xlm_benchmark_unconfigured(self, console: AuraCodeConsole):
+        console.engine.config.auraxlm_endpoint = None
+        result = await console._dispatch_command("/xlm-benchmark")
+        assert "AuraXLM endpoint not configured" in result
+
+    async def test_grid_mirror_status_uninitialized(self, console: AuraCodeConsole):
+        result = await console._dispatch_command("/grid-mirror status")
+        assert "Grid mirror" in result
