@@ -232,15 +232,18 @@ async def fleet_rollback_handler(request: web.Request) -> web.Response:
 async def ui_static_handler(request: web.Request) -> web.StreamResponse:
     """Serve static web assets for Mission Command Flight Deck."""
     tail = request.match_info.get("tail", "")
-    assets_dir = Path(__file__).parent.parent / "assets" / "ui"
+    assets_dir = (Path(__file__).parent.parent / "assets" / "ui").resolve()
 
     if not tail or tail == "/":
-        target = assets_dir / "index.html"
+        target = (assets_dir / "index.html").resolve()
     else:
         target = (assets_dir / tail.lstrip("/")).resolve()
 
     # Prevent directory traversal outside assets/ui
-    if not str(target).startswith(str(assets_dir.resolve())):
+    try:
+        if not target.is_relative_to(assets_dir):
+            return web.Response(status=403, text="Forbidden")
+    except ValueError:
         return web.Response(status=403, text="Forbidden")
 
     if not target.is_file():

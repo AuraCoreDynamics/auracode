@@ -175,13 +175,18 @@ def create_application(
 
 
 def _create_stub_backend():
-    """Create a stub backend that returns helpful error messages."""
+    """Create a fallback backend that raises HTTP 503 when routing is attempted."""
     from auracode.models.context import SessionContext
     from auracode.models.request import RequestIntent
-    from auracode.routing.base import BaseRouterBackend, ModelInfo, RouteResult
+    from auracode.routing.base import (
+        BaseRouterBackend,
+        ModelBackendNotConfiguredError,
+        ModelInfo,
+        RouteResult,
+    )
 
     class StubBackend(BaseRouterBackend):
-        """Placeholder backend when no real router is configured."""
+        """Fallback backend when no real router is configured."""
 
         async def route(
             self,
@@ -190,12 +195,9 @@ def _create_stub_backend():
             context: SessionContext | None = None,
             options: dict[str, Any] | None = None,
         ) -> RouteResult:
-            return RouteResult(
-                content=(
-                    "No routing backend configured. "
-                    "Install AuraRouter or configure a grid endpoint."
-                ),
-                model_used="none",
+            raise ModelBackendNotConfiguredError(
+                "HTTP 503 Service Unavailable: No routing backend configured. "
+                "Install AuraRouter or configure a grid endpoint."
             )
 
         async def list_models(self) -> list[ModelInfo]:

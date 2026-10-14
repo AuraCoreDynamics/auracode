@@ -7,7 +7,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from auracode.routing.base import AnalyzerInfo, ServiceInfo
+from auracode.models.request import RequestIntent
+from auracode.routing.base import (
+    AnalyzerInfo,
+    ModelBackendNotConfiguredError,
+    ServiceInfo,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -303,3 +308,13 @@ class TestStubBackendDefaults:
 
         result = await stub.set_active_analyzer("x")
         assert result is False
+
+    async def test_route_raises_model_backend_not_configured_error(self):
+        from auracode.app import _create_stub_backend
+
+        stub = _create_stub_backend()
+        with pytest.raises(ModelBackendNotConfiguredError) as exc_info:
+            await stub.route("test prompt", RequestIntent.GENERATE_CODE)
+
+        assert exc_info.value.status_code == 503
+        assert "503" in str(exc_info.value)

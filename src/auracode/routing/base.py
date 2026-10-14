@@ -12,6 +12,20 @@ from auracode.models.context import SessionContext
 from auracode.models.request import RequestIntent, TokenUsage
 
 
+class ModelBackendNotConfiguredError(RuntimeError):
+    """Raised when an operation requires a model backend, but none is configured (HTTP 503)."""
+
+    def __init__(
+        self,
+        message: str = (
+            "HTTP 503 Service Unavailable: No routing backend configured. "
+            "Install AuraRouter or configure a grid endpoint."
+        ),
+    ) -> None:
+        super().__init__(message)
+        self.status_code = 503
+
+
 class ModelInfo(BaseModel):
     """Descriptor for a model available through a router backend."""
 

@@ -1,6 +1,11 @@
 """Routing layer — model selection and dispatch."""
 
-from auracode.routing.base import BaseRouterBackend, ModelInfo, RouteResult
+from auracode.routing.base import (
+    BaseRouterBackend,
+    ModelBackendNotConfiguredError,
+    ModelInfo,
+    RouteResult,
+)
 from auracode.routing.intent_map import (
     INTENT_ROLE_MAP,
     build_context_prompt,
@@ -10,6 +15,7 @@ from auracode.routing.mcp_catalog import McpCatalogClient, ToolInfo
 
 __all__ = [
     "BaseRouterBackend",
+    "ModelBackendNotConfiguredError",
     "ModelInfo",
     "RouteResult",
     "INTENT_ROLE_MAP",
