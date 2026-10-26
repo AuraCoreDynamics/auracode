@@ -36,7 +36,7 @@ class McpCatalogClient:
         self._config = config_loader
 
     async def list_tools(self) -> list[ToolInfo]:
-        """Return all tools from connected MCP clients."""
+        """Return all tools from connected MCP clients, deduplicated by name."""
         if self._registry is None:
             return []
 
@@ -44,14 +44,18 @@ class McpCatalogClient:
             self._registry.get_all_remote_tools,
         )
         tools: list[ToolInfo] = []
+        seen: set[str] = set()
         for t in raw_tools:
-            tools.append(
-                ToolInfo(
-                    name=t.get("name", ""),
-                    description=t.get("description", ""),
-                    input_schema=t.get("inputSchema", t.get("input_schema", {})),
+            name = t.get("name", "")
+            if name and name not in seen:
+                seen.add(name)
+                tools.append(
+                    ToolInfo(
+                        name=name,
+                        description=t.get("description", ""),
+                        input_schema=t.get("inputSchema", t.get("input_schema", {})),
+                    )
                 )
-            )
         return tools
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:

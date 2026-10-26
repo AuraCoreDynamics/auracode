@@ -57,18 +57,31 @@ def _safe_configure_logging(level: str) -> None:
 
 
 def load_config(config_path: str | None = None) -> AuraCodeConfig:
-    """Load config from yaml file or return defaults."""
+    """Load config from yaml file or return defaults with environment detection."""
+    data: dict[str, Any] = {}
     if config_path and os.path.exists(config_path):
         with open(config_path) as f:
             data = yaml.safe_load(f) or {}
-        return AuraCodeConfig(**data)
-    # Try default locations
-    for path in ["auracode.yaml", os.path.expanduser("~/.auracode.yaml")]:
-        if os.path.exists(path):
-            with open(path) as f:
-                data = yaml.safe_load(f) or {}
-            return AuraCodeConfig(**data)
-    return AuraCodeConfig()
+    else:
+        # Try default locations
+        for path in ["auracode.yaml", os.path.expanduser("~/.auracode.yaml")]:
+            if os.path.exists(path):
+                with open(path) as f:
+                    data = yaml.safe_load(f) or {}
+                break
+
+    # Environment overrides for seamless grid & router integration
+    if not data.get("grid_endpoint"):
+        grid_env = os.environ.get("AURAGRID_URL") or os.environ.get("AURAGRID_ENDPOINT")
+        if grid_env:
+            data["grid_endpoint"] = grid_env
+
+    if not data.get("aurarouter_url"):
+        router_env = os.environ.get("AURAROUTER_URL")
+        if router_env:
+            data["aurarouter_url"] = router_env
+
+    return AuraCodeConfig(**data)
 
 
 def create_application(

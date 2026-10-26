@@ -33,6 +33,21 @@ class TestListTools:
         tools = await client.list_tools()
         assert tools == []
 
+    async def test_list_tools_deduplicates_by_name(self):
+        registry = MagicMock()
+        registry.get_all_remote_tools = MagicMock(
+            return_value=[
+                {"name": "fetch", "description": "v1"},
+                {"name": "fetch", "description": "v2 (duplicate)"},
+                {"name": "unique", "description": "unique tool"},
+            ]
+        )
+        client = McpCatalogClient(registry=registry)
+        tools = await client.list_tools()
+        assert len(tools) == 2
+        assert [t.name for t in tools] == ["fetch", "unique"]
+        assert tools[0].description == "v1"
+
 
 class TestCallTool:
     async def test_call_tool_delegates(self, mock_registry):

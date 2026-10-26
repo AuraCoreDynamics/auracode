@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any
 
 import httpx
@@ -63,7 +64,8 @@ class CatalogRegistrar:
         heartbeat_interval: float = DEFAULT_HEARTBEAT_INTERVAL,
     ):
         self._mcp_endpoint = mcp_endpoint
-        self._aurarouter_url = aurarouter_url.rstrip("/") if aurarouter_url else None
+        resolved_url = aurarouter_url or os.environ.get("AURAROUTER_URL") or DEFAULT_AURAROUTER_URL
+        self._aurarouter_url = resolved_url.rstrip("/") if resolved_url else None
         self._heartbeat_interval = heartbeat_interval
         self._heartbeat_task: asyncio.Task[None] | None = None
         self._registered = False
