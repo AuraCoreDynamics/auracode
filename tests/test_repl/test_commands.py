@@ -68,6 +68,7 @@ class TestCommandRegistry:
             "commit",
             "bundle",
             "mas-status",
+            "grid",
             "grid-mirror",
             "xlm-benchmark",
         }
@@ -496,3 +497,11 @@ class TestUnknownCommand:
     async def test_grid_mirror_status_uninitialized(self, console: AuraCodeConsole):
         result = await console._dispatch_command("/grid-mirror status")
         assert "Grid mirror" in result
+
+    async def test_grid_unconnected(self, console: AuraCodeConsole):
+        console.engine.config.grid_endpoint = None
+        result = await console._dispatch_command("/grid")
+        assert "AuraGrid is not currently connected" in result
+
+    def test_grid_alias_resolves(self):
+        assert get("grid-status") is get("grid")

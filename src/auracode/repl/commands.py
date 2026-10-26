@@ -862,12 +862,88 @@ async def _handle_xlm_benchmark(console: AuraCodeConsole, args: str) -> str | No
         )
 
 
+async def _handle_grid(console: AuraCodeConsole, args: str) -> str | None:
+    """Show live status of connected AuraGrid node, services, and apps."""
+    import os
+
+    import httpx
+
+    grid_ep = getattr(console.engine.config, "grid_endpoint", None) or os.environ.get(
+        "AURAGRID_URL"
+    )
+    if not grid_ep:
+        return (
+            "AuraGrid is not currently connected.\n"
+            "To connect AuraCode to AuraGrid, launch via 'auragrid code' or configure\n"
+            "'grid_endpoint' in auracode.yaml or the AURAGRID_URL environment variable."
+        )
+
+    clean_url = grid_ep.rstrip("/")
+    lines = ["", f"AuraGrid Node Status ({clean_url})"]
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            status_resp = await client.get(f"{clean_url}/api/status")
+            if status_resp.is_success:
+                s = status_resp.json()
+                node_id = s.get("nodeId", "unknown")
+                cell_id = s.get("cellId", "unknown")
+                version = s.get("version", "unknown")
+                uptime = s.get("uptime", "unknown")
+                lines.append(f"  Node ID:    {node_id}")
+                lines.append(f"  Cell ID:    {cell_id}")
+                lines.append(f"  Version:    {version}")
+                lines.append(f"  Uptime:     {uptime}")
+            else:
+                lines.append(f"  Status:     Online (HTTP {status_resp.status_code})")
+
+            # Check services
+            svc_resp = await client.get(f"{clean_url}/api/services")
+            if svc_resp.is_success:
+                svcs = svc_resp.json()
+                lines.append(f"  Services ({len(svcs)} registered):")
+                for svc in svcs[:8]:
+                    s_id = svc.get("serviceId", "svc")
+                    cid = svc.get("contractId", "")
+                    c_tag = f" [{cid}]" if cid else ""
+                    lines.append(f"    - {s_id}{c_tag}")
+                if len(svcs) > 8:
+                    lines.append(f"    ... and {len(svcs) - 8} more")
+
+            # Check apps/deployments
+            apps_resp = await client.get(f"{clean_url}/api/apps")
+            if apps_resp.is_success:
+                apps = apps_resp.json()
+                app_list = apps if isinstance(apps, list) else apps.get("applications", [])
+                lines.append(f"  Catalog Apps ({len(app_list)}):")
+                for app in app_list[:5]:
+                    a_id = app.get("appId", "") if isinstance(app, dict) else str(app)
+                    lines.append(f"    * {a_id}")
+    except Exception as exc:
+        lines.append(f"  Connection: FAILED ({exc})")
+
+    router_url = getattr(console.engine.config, "aurarouter_url", None) or os.environ.get(
+        "AURAROUTER_URL"
+    )
+    if router_url:
+        lines.append(f"  AuraRouter: {router_url} (MCP Catalog active)")
+
+    return "\n".join(lines)
+
+
 def register_builtin_commands() -> None:
     """Register all built-in slash commands."""
     _COMMANDS.clear()
 
     register(SlashCommand("help", "Show this help message", _handle_help, ["h", "?"]))
     register(SlashCommand("status", "Show engine health and session info", _handle_status))
+    register(
+        SlashCommand(
+            "grid",
+            "Show live status of connected AuraGrid node and services",
+            _handle_grid,
+            ["grid-status"],
+        )
+    )
     register(
         SlashCommand(
             "catalog",
