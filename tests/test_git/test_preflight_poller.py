@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -28,7 +29,7 @@ def test_poller_preflight_blocks_restart_on_failure(tmp_path: Path) -> None:
     poller = GitMirrorPoller(
         mirror_service=mirror_mock,
         lifecycle_client=lifecycle_mock,
-        preflight_command='python -c "import sys; sys.exit(1)"',
+        preflight_command=f'"{sys.executable}" -c "import sys; sys.exit(1)"',
     )
     poller._last_hashes["testapp.git"] = "old_hash_123"
 
@@ -59,7 +60,7 @@ def test_poller_preflight_permits_restart_on_success(tmp_path: Path) -> None:
     poller = GitMirrorPoller(
         mirror_service=mirror_mock,
         lifecycle_client=lifecycle_mock,
-        preflight_command='python -c "import sys; sys.exit(0)"',
+        preflight_command=f'"{sys.executable}" -c "import sys; sys.exit(0)"',
     )
     poller._last_hashes["my-service.git"] = "hash_v1"
     poller._get_branch_hash = MagicMock(return_value="hash_v2")  # type: ignore

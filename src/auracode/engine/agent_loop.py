@@ -313,6 +313,7 @@ class AgenticExecutionLoop:
             proc = subprocess.run(
                 cmd_args,
                 shell=use_shell,
+                stdin=subprocess.DEVNULL,
                 cwd=verif.working_directory,
                 capture_output=True,
                 text=True,

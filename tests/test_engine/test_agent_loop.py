@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import uuid
 from pathlib import Path
 from typing import Any
@@ -62,7 +63,7 @@ async def test_agent_loop_success_in_one_turn(tmp_path: Path) -> None:
     engine = AuraCodeEngine(config, backend)
     loop = AgenticExecutionLoop(engine)
 
-    cmd = 'python -c "exit(0)"'
+    cmd = f'"{sys.executable}" -c "exit(0)"'
     verif = VerificationCommand(command=cmd, working_directory=str(tmp_path))
     req = EngineRequest(
         request_id=str(uuid.uuid4()),
@@ -91,7 +92,7 @@ async def test_agent_loop_remediation_retries(tmp_path: Path) -> None:
     # First attempt fails, second attempt succeeds via temporary file indicator
     flag_file = tmp_path / "flag.txt"
     cmd = (
-        f'python -c "import os, sys; '
+        f'"{sys.executable}" -c "import os, sys; '
         f"has_f = os.path.exists(r'{flag_file}'); "
         f"open(r'{flag_file}', 'w').close(); "
         f'sys.exit(0 if has_f else 1)"'
@@ -123,7 +124,7 @@ async def test_agent_loop_exhausts_budget(tmp_path: Path) -> None:
     engine = AuraCodeEngine(config, backend)
     loop = AgenticExecutionLoop(engine)
 
-    cmd = "python -c \"import sys; sys.stderr.write('err'); sys.exit(1)\""
+    cmd = f'"{sys.executable}" -c "import sys; sys.stderr.write(\'err\'); sys.exit(1)"'
     verif = VerificationCommand(command=cmd, working_directory=str(tmp_path))
     budget = RemediationBudget(max_attempts=3, current_attempt=0)
     req = EngineRequest(
@@ -223,7 +224,7 @@ async def test_agent_loop_artifact_application(tmp_path: Path) -> None:
         working_directory=str(tmp_path),
     )
     cmd = (
-        f'python -c "'
+        f'"{sys.executable}" -c "'
         f"import sys; "
         f"sys.path.insert(0, r'{tmp_path}'); "
         f"import calc; "

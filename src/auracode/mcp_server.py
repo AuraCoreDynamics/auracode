@@ -592,6 +592,9 @@ def create_mcp_server(engine: Any) -> Any | None:
             if manifest_path.exists():
                 with open(manifest_path, encoding="utf-8") as f:
                     manifest_data = json.load(f)
+                manifest_data["appId"] = name
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(manifest_data, f, indent=2)
                 return json.dumps(
                     {
                         "status": "success",
@@ -604,5 +607,197 @@ def create_mcp_server(engine: Any) -> Any | None:
             return f"Scaffolded in {dest_dir}"
         except Exception as e:
             return f"Error initializing app manifest: {e}"
+
+    @server.tool()
+    async def auragrid_app_validate(path: str = ".") -> str:
+        """Validate an AuraGrid application manifest (app.manifest.json) or .agp package."""
+        import json
+        from pathlib import Path
+
+        try:
+            from auragrid.cli import _validate_target
+
+            target = str(Path(path).resolve())
+            is_valid, errors, warnings, manifest = _validate_target(target)
+            return json.dumps(
+                {
+                    "valid": is_valid,
+                    "target": target,
+                    "appId": manifest.get("appId") if manifest else None,
+                    "version": manifest.get("version") if manifest else None,
+                    "errors": errors,
+                    "warnings": warnings,
+                },
+                indent=2,
+            )
+        except Exception as e:
+            return json.dumps({"valid": False, "error": str(e)})
+
+    @server.tool()
+    async def auragrid_app_pack(
+        directory: str = ".",
+        output: str = "",
+        sign_key: str = "",
+        force: bool = False,
+    ) -> str:
+        """Package an application folder into a secure .agp bundle with SHA-256 checksums."""
+        import json
+        from pathlib import Path
+
+        try:
+            from auragrid.cli import _validate_target, build_agp_package
+
+            src_dir = str(Path(directory).resolve())
+            if not force:
+                is_valid, errors, warnings, manifest = _validate_target(src_dir)
+                if not is_valid:
+                    return json.dumps(
+                        {
+                            "status": "error",
+                            "message": "Pre-flight validation failed",
+                            "errors": errors,
+                            "warnings": warnings,
+                        },
+                        indent=2,
+                    )
+
+            manifest_path = Path(src_dir) / "app.manifest.json"
+            app_id = "app"
+            version = "1.0.0"
+            if manifest_path.exists():
+                with open(manifest_path, encoding="utf-8") as f:
+                    m = json.load(f)
+                    app_id = m.get("appId", app_id)
+                    version = m.get("version", version)
+
+            out_path = output or str(Path(src_dir) / f"{app_id}-{version}.agp")
+            key_path = sign_key if sign_key else None
+            packed_count, excluded_count = build_agp_package(src_dir, out_path, key_path)
+
+            return json.dumps(
+                {
+                    "status": "success",
+                    "package_path": str(Path(out_path).resolve()),
+                    "appId": app_id,
+                    "version": version,
+                    "files_packaged": packed_count,
+                    "files_excluded": excluded_count,
+                    "signed": bool(key_path),
+                },
+                indent=2,
+            )
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
+
+    @server.tool()
+    async def auragrid_app_deploy(
+        package_path: str,
+        url: str = "http://localhost:7077",
+        reconcile: bool = True,
+    ) -> str:
+        """Deploy an application bundle (.agp) or manifest (.json) to an active AuraGrid node."""
+        import json
+        from pathlib import Path
+
+        import httpx
+
+        try:
+            p = Path(package_path).resolve()
+            if not p.exists():
+                return json.dumps({"status": "error", "message": f"Package file not found: {p}"})
+
+            headers = {
+                "Content-Type": "application/octet-stream",
+                "X-Deploy-Immediately": "true" if reconcile else "false",
+            }
+
+            async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
+                with open(p, "rb") as f:
+                    content = f.read()
+
+                resp = await client.post(
+                    f"{url.rstrip('/')}/api/catalog/upload",
+                    headers=headers,
+                    content=content,
+                )
+
+                if resp.status_code in (200, 201, 202):
+                    return json.dumps(
+                        {
+                            "status": "success",
+                            "http_status": resp.status_code,
+                            "response": resp.json()
+                            if resp.headers.get("content-type", "").startswith("application/json")
+                            else resp.text,
+                        },
+                        indent=2,
+                    )
+                else:
+                    return json.dumps(
+                        {
+                            "status": "error",
+                            "http_status": resp.status_code,
+                            "message": resp.text,
+                        },
+                        indent=2,
+                    )
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
+
+    @server.tool()
+    async def auragrid_app_logs(
+        mas_id: str = "",
+        count: int = 50,
+        url: str = "http://localhost:7077",
+    ) -> str:
+        """Fetch live logs from active AuraGrid node or MAS instance."""
+        import json
+
+        import httpx
+
+        try:
+            endpoint = (
+                f"{url.rstrip('/')}/api/logs/{mas_id}" if mas_id else f"{url.rstrip('/')}/api/logs"
+            )
+            async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+                resp = await client.get(endpoint)
+                if resp.status_code == 200:
+                    entries = resp.json() or []
+                    recent = entries[-count:]
+                    return json.dumps({"count": len(recent), "entries": recent}, indent=2)
+                return json.dumps(
+                    {"status": "error", "http_status": resp.status_code, "message": resp.text}
+                )
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
+
+    @server.tool()
+    async def auragrid_get_topology(
+        url: str = "http://localhost:7077",
+    ) -> str:
+        """Query active AuraGrid cell topology, node health, active MAS instances,
+        and registered services.
+        """
+        import json
+
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+                status_res = await client.get(f"{url.rstrip('/')}/api/status")
+                services_res = await client.get(f"{url.rstrip('/')}/api/services")
+                deployments_res = await client.get(f"{url.rstrip('/')}/api/deployments")
+
+                topology: dict[str, Any] = {
+                    "node_url": url,
+                    "status": status_res.json() if status_res.status_code == 200 else None,
+                    "services": services_res.json() if services_res.status_code == 200 else [],
+                    "deployments": deployments_res.json()
+                    if deployments_res.status_code == 200
+                    else [],
+                }
+                return json.dumps(topology, indent=2)
+        except Exception as e:
+            return json.dumps({"status": "error", "node_url": url, "message": str(e)})
 
     return server

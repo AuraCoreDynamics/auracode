@@ -283,6 +283,12 @@ class TestMcpTools:
         assert "auracode_synthesize_commit" in tools
         assert "auracode_bundle_pack" in tools
         assert "auracode_bundle_validate" in tools
+        assert "auragrid_app_init" in tools
+        assert "auragrid_app_validate" in tools
+        assert "auragrid_app_pack" in tools
+        assert "auragrid_app_deploy" in tools
+        assert "auragrid_app_logs" in tools
+        assert "auragrid_get_topology" in tools
 
     async def test_auracode_repomap_executes(self, tools_and_engine, tmp_path) -> None:
         tools, _ = tools_and_engine
@@ -300,3 +306,27 @@ class TestMcpTools:
         data = json.loads(output)
         assert data["count"] == 0
         assert data["files"] == []
+
+    async def test_auragrid_mcp_lifecycle(self, tools_and_engine, tmp_path) -> None:
+        import json
+
+        tools, _ = tools_and_engine
+        # 1. Init
+        init_res = await tools["auragrid_app_init"](
+            name="test-mcp-app",
+            template="tier1",
+            target_dir=str(tmp_path / "test-mcp-app"),
+        )
+        assert "test-mcp-app" in init_res
+
+        app_dir = str(tmp_path / "test-mcp-app")
+        # 2. Validate
+        val_res = await tools["auragrid_app_validate"](app_dir)
+        val_data = json.loads(val_res)
+        assert val_data["valid"] is True
+
+        # 3. Pack
+        pack_res = await tools["auragrid_app_pack"](directory=app_dir)
+        pack_data = json.loads(pack_res)
+        assert pack_data["status"] == "success"
+        assert pack_data["files_packaged"] >= 1

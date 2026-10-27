@@ -158,6 +158,7 @@ class GitMirrorPoller:
             proc = subprocess.run(
                 self.preflight_command,
                 shell=True,
+                stdin=subprocess.DEVNULL,
                 cwd=scratch_dir,
                 capture_output=True,
                 text=True,

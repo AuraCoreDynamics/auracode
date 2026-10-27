@@ -215,7 +215,7 @@ class TestMcpServerIntegration:
             assert "auracode_write_file" in registered_tools
             assert "auracode_edit_file" in registered_tools
             assert "auracode_bash" in registered_tools
-            assert len(registered_tools) == 21
+            assert len(registered_tools) == 30
 
         finally:
             if saved is not None:
