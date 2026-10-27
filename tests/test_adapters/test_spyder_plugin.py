@@ -68,3 +68,10 @@ def test_spyder_plugin_instantiation(tmp_path: Path):
     assert plugin.NAME == "auracode"
     assert plugin.bridge is not None
     assert plugin.widget is not None
+    if hasattr(plugin.widget, "tabs"):
+        assert plugin.widget.tabs.count() == 4
+        tab_names = [plugin.widget.tabs.tabText(i) for i in range(4)]
+        assert "AuraCode" in tab_names
+        assert "Repo-Map" in tab_names
+        assert "AuraSeed mvenv" in tab_names
+        assert "AuraGrid" in tab_names

@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import subprocess
+import sys
 import webbrowser
 from pathlib import Path
 from typing import Any
@@ -184,6 +185,7 @@ def _create_spyder_widget_class():
     """Lazily construct Qt widget class to prevent hard GUI dependencies during headless CLI."""
     try:
         from qtpy.QtWidgets import (
+            QApplication,
             QComboBox,
             QHBoxLayout,
             QLabel,
@@ -200,6 +202,8 @@ def _create_spyder_widget_class():
             """Dockable Spyder UI widget providing 4-tab control plane."""
 
             def __init__(self, bridge: SpyderAuraCodeBridge, parent=None):
+                if QApplication.instance() is None:
+                    self._app = QApplication(sys.argv if sys.argv else ["auracode"])
                 super().__init__(parent)
                 self.bridge = bridge
                 self._init_ui()
