@@ -232,3 +232,71 @@ class RepoMapResponse(BaseModel):
     workspace_root: str
     map_text: str
     symbol_count: int = 0
+
+
+# ── Bidirectional IDE Diagnostics & Buffer Protocol ──────────────────────
+
+
+class DiagnosticsUpdate(BaseModel):
+    """Notification of updated IDE diagnostics from connected IDE."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.diagnostics_update", "diagnostics_update"] = "ide.diagnostics_update"
+    file_path: str | None = None
+    diagnostics: list[Diagnostic] = []
+
+
+class BufferUpdate(BaseModel):
+    """Notification of active or updated file buffer from connected IDE."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.buffer_update", "buffer_update"] = "ide.buffer_update"
+    file_path: str
+    content: str
+    language: str | None = None
+    is_dirty: bool = False
+    selection: TextSelection | None = None
+
+
+class DiagnosticsRequest(BaseModel):
+    """Server request asking IDE for active diagnostics."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.diagnostics_request"] = "ide.diagnostics_request"
+    request_id: str
+    file_path: str | None = None
+
+
+class DiagnosticsResponse(BaseModel):
+    """Client response containing active diagnostics."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.diagnostics_response"] = "ide.diagnostics_response"
+    request_id: str
+    diagnostics: list[Diagnostic] = []
+
+
+class ActiveBufferRequest(BaseModel):
+    """Server request asking IDE for active buffer content."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.active_buffer_request"] = "ide.active_buffer_request"
+    request_id: str
+
+
+class ActiveBufferResponse(BaseModel):
+    """Client response containing active buffer."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["ide.active_buffer_response"] = "ide.active_buffer_response"
+    request_id: str
+    active_file: str | None = None
+    content: str | None = None
+    language: str | None = None
+    selection: TextSelection | None = None

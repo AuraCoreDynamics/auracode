@@ -14,8 +14,10 @@ from auracode.shim.ide_protocol import (
     ActCompleted,
     ActProgress,
     ActRequest,
+    BufferUpdate,
     CancelRequest,
     ChatMessage,
+    DiagnosticsUpdate,
     RepoMapRequest,
     RepoMapResponse,
     ResolveConflictRequest,
@@ -25,6 +27,7 @@ from auracode.shim.ide_protocol import (
     StreamToken,
     ToolResponse,
 )
+from auracode.shim.ide_state import ide_state
 from auracode.shim.ide_tools import ToolManager
 
 log = structlog.get_logger()
@@ -84,6 +87,8 @@ async def handle_chat(ws: web.WebSocketResponse, data: dict, engine) -> None:
 
     request_id = uuid.uuid4().hex
     session_id = msg.session_id or uuid.uuid4().hex
+    if msg.ide_context:
+        ide_state.update_from_context(msg.ide_context)
     intent = _map_intent(msg.intent)
     context = _build_context(msg, session_id)
 
@@ -334,6 +339,30 @@ async def ide_websocket_handler(request: web.Request) -> web.WebSocketResponse:
                     handle_cancel(data)
                 elif msg_type == "tool_response":
                     handle_tool_response(data)
+                elif msg_type in ("ide.diagnostics_update", "diagnostics_update"):
+                    try:
+                        diag_update = DiagnosticsUpdate.model_validate(data)
+                        file_path = diag_update.file_path or ide_state.active_file or "workspace"
+                        ide_state.update_diagnostics(file_path, diag_update.diagnostics)
+                        log.debug(
+                            "ide_ws.diagnostics_updated",
+                            file_path=file_path,
+                            count=len(diag_update.diagnostics),
+                        )
+                    except Exception as exc:
+                        log.warning("ide_ws.invalid_diagnostics_update", error=str(exc))
+                elif msg_type in ("ide.buffer_update", "buffer_update"):
+                    try:
+                        buf_update = BufferUpdate.model_validate(data)
+                        ide_state.update_buffer(
+                            buf_update.file_path,
+                            buf_update.content,
+                            buf_update.language,
+                            buf_update.selection,
+                        )
+                        log.debug("ide_ws.buffer_updated", file_path=buf_update.file_path)
+                    except Exception as exc:
+                        log.warning("ide_ws.invalid_buffer_update", error=str(exc))
                 else:
                     err = ServerError(
                         message=f"Unknown message type: {msg_type}",

@@ -520,4 +520,89 @@ def create_mcp_server(engine: Any) -> Any | None:
         except Exception as e:
             return f"Error validating bundle: {e}"
 
+    @server.tool()
+    async def auracode_ide_get_diagnostics(file_path: str = "", severity: str = "") -> str:
+        """Expose active IDE compiler/linter diagnostics for near-zero latency self-healing."""
+        from auracode.shim.ide_state import ide_state
+
+        diags = ide_state.get_diagnostics(
+            file_path=file_path or None,
+            severity=severity or None,
+        )
+        if not diags:
+            return "No active diagnostics found in connected IDE."
+
+        lines = [f"Found {len(diags)} diagnostic(s):"]
+        for d in diags:
+            src = f" ({d.source})" if d.source else ""
+            lines.append(
+                f"- [{d.severity.upper()}] {d.file_path}:{d.line}:{d.col} - {d.message}{src}"
+            )
+        return "\n".join(lines)
+
+    @server.tool()
+    async def auracode_ide_get_active_buffer() -> str:
+        """Expose current active IDE file buffer and selection for zero-latency inspection."""
+        import json
+
+        from auracode.shim.ide_state import ide_state
+
+        buf = ide_state.get_active_buffer()
+        if not buf:
+            return "No active buffer recorded from connected IDE."
+        return json.dumps(buf, indent=2)
+
+    @server.tool()
+    async def auracode_ide_get_open_buffers() -> str:
+        """List all open editor buffers and diagnostic counts in connected IDE."""
+        import json
+
+        from auracode.shim.ide_state import ide_state
+
+        buffers = ide_state.get_open_buffers()
+        return json.dumps({"count": len(buffers), "buffers": buffers}, indent=2)
+
+    @server.tool()
+    async def auragrid_app_init(
+        name: str,
+        template: str = "tier1",
+        runtime: str = "python",
+        target_dir: str = "",
+        managed_venv: str = "aurarouter",
+        description: str = "",
+    ) -> str:
+        """Scaffold a new AuraGrid application manifest with schema auto-completion."""
+        import argparse
+        import json
+        from pathlib import Path
+
+        try:
+            from auragrid.cli import _handle_init
+
+            dest_dir = Path(target_dir) if target_dir else Path.cwd() / name
+            args = argparse.Namespace(
+                name=str(dest_dir),
+                template=template,
+                runtime=runtime,
+                managed_venv=managed_venv,
+                description=description,
+            )
+            _handle_init(args)
+            manifest_path = dest_dir / "app.manifest.json"
+            if manifest_path.exists():
+                with open(manifest_path, encoding="utf-8") as f:
+                    manifest_data = json.load(f)
+                return json.dumps(
+                    {
+                        "status": "success",
+                        "path": str(manifest_path),
+                        "template": template,
+                        "manifest": manifest_data,
+                    },
+                    indent=2,
+                )
+            return f"Scaffolded in {dest_dir}"
+        except Exception as e:
+            return f"Error initializing app manifest: {e}"
+
     return server
