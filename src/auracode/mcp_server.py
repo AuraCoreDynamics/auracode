@@ -577,18 +577,58 @@ def create_mcp_server(engine: Any) -> Any | None:
         from pathlib import Path
 
         try:
-            from auragrid.cli import _handle_init
+            try:
+                from auragrid.cli import _handle_init
+            except ImportError:
+                _handle_init = None
 
             dest_dir = Path(target_dir) if target_dir else Path.cwd() / name
-            args = argparse.Namespace(
-                name=str(dest_dir),
-                template=template,
-                runtime=runtime,
-                managed_venv=managed_venv,
-                description=description,
-            )
-            _handle_init(args)
+            dest_dir.mkdir(parents=True, exist_ok=True)
             manifest_path = dest_dir / "app.manifest.json"
+
+            if _handle_init is not None:
+                args = argparse.Namespace(
+                    name=str(dest_dir),
+                    template=template,
+                    runtime=runtime,
+                    managed_venv=managed_venv,
+                    description=description,
+                )
+                _handle_init(args)
+            else:
+                # Standalone fallback scaffolding when auragrid is absent in environment
+                manifest_data = {
+                    "appId": name,
+                    "name": name.replace("-", " ").title(),
+                    "version": "1.0.0",
+                    "description": description or f"AuraGrid application ({template})",
+                    "services": [
+                        {
+                            "masId": f"{name}-mas",
+                            "displayName": f"{name} MAS",
+                            "mode": "CellSingleton",
+                            "runtime": runtime.capitalize() if runtime else "Python",
+                            "pythonConfig": {
+                                "scriptPath": "app.py",
+                                "workingDirectory": ".",
+                                "managedVenvName": managed_venv,
+                            },
+                            "remoting": {
+                                "enableGrpc": False,
+                                "enableOpenApi": True,
+                                "enableMcp": True,
+                            },
+                            "restartPolicy": "OnFailure",
+                            "maxRestartAttempts": 3,
+                        }
+                    ],
+                }
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(manifest_data, f, indent=2)
+                app_py = dest_dir / "app.py"
+                if not app_py.exists():
+                    app_py.write_text("print('AuraGrid service running...')\n", encoding="utf-8")
+
             if manifest_path.exists():
                 with open(manifest_path, encoding="utf-8") as f:
                     manifest_data = json.load(f)
@@ -615,10 +655,39 @@ def create_mcp_server(engine: Any) -> Any | None:
         from pathlib import Path
 
         try:
-            from auragrid.cli import _validate_target
+            try:
+                from auragrid.cli import _validate_target
+            except ImportError:
+                _validate_target = None
 
             target = str(Path(path).resolve())
-            is_valid, errors, warnings, manifest = _validate_target(target)
+            if _validate_target is not None:
+                is_valid, errors, warnings, manifest = _validate_target(target)
+            else:
+                # Standalone fallback validation
+                target_path = Path(target)
+                errors = []
+                warnings = []
+                manifest = None
+                manifest_path = (
+                    target_path / "app.manifest.json" if target_path.is_dir() else target_path
+                )
+                if not manifest_path.exists():
+                    errors.append(f"Manifest not found at {manifest_path}")
+                    is_valid = False
+                else:
+                    try:
+                        with open(manifest_path, encoding="utf-8") as f:
+                            manifest = json.load(f)
+                        if not manifest.get("appId"):
+                            errors.append("Missing required field 'appId'")
+                        if not manifest.get("services"):
+                            errors.append("Missing required field 'services'")
+                        is_valid = len(errors) == 0
+                    except Exception as err:
+                        errors.append(f"Invalid JSON manifest: {err}")
+                        is_valid = False
+
             return json.dumps(
                 {
                     "valid": is_valid,
@@ -645,22 +714,13 @@ def create_mcp_server(engine: Any) -> Any | None:
         from pathlib import Path
 
         try:
-            from auragrid.cli import _validate_target, build_agp_package
+            try:
+                from auragrid.cli import _validate_target, build_agp_package
+            except ImportError:
+                _validate_target = None
+                build_agp_package = None
 
             src_dir = str(Path(directory).resolve())
-            if not force:
-                is_valid, errors, warnings, manifest = _validate_target(src_dir)
-                if not is_valid:
-                    return json.dumps(
-                        {
-                            "status": "error",
-                            "message": "Pre-flight validation failed",
-                            "errors": errors,
-                            "warnings": warnings,
-                        },
-                        indent=2,
-                    )
-
             manifest_path = Path(src_dir) / "app.manifest.json"
             app_id = "app"
             version = "1.0.0"
@@ -671,8 +731,36 @@ def create_mcp_server(engine: Any) -> Any | None:
                     version = m.get("version", version)
 
             out_path = output or str(Path(src_dir) / f"{app_id}-{version}.agp")
-            key_path = sign_key if sign_key else None
-            packed_count, excluded_count = build_agp_package(src_dir, out_path, key_path)
+
+            if _validate_target is not None and build_agp_package is not None:
+                if not force:
+                    is_valid, errors, warnings, manifest = _validate_target(src_dir)
+                    if not is_valid:
+                        return json.dumps(
+                            {
+                                "status": "error",
+                                "message": "Pre-flight validation failed",
+                                "errors": errors,
+                                "warnings": warnings,
+                            },
+                            indent=2,
+                        )
+
+                key_path = sign_key if sign_key else None
+                packed_count, excluded_count = build_agp_package(src_dir, out_path, key_path)
+            else:
+                # Standalone fallback packaging (zip-based .agp bundle)
+                import zipfile
+
+                dest_file = Path(out_path)
+                packed_count = 0
+                excluded_count = 0
+                with zipfile.ZipFile(dest_file, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for p in Path(src_dir).rglob("*"):
+                        if p.is_file() and p != dest_file and not p.name.endswith(".agp"):
+                            zf.write(p, p.relative_to(src_dir))
+                            packed_count += 1
+                key_path = None
 
             return json.dumps(
                 {

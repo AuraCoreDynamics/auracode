@@ -208,3 +208,6 @@ src/auracode/grid/_generated/auracode_grid_pb2*.py
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Claude Agent Worktrees
+.claude/
