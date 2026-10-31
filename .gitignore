@@ -211,3 +211,14 @@ __marimo__/
 
 # Claude Agent Worktrees
 .claude/
+
+# AuraCode CI & Worktrees
+.worktrees/
+.auracode/
+TestResults/
+*.trx
+
+# IDE / Editor folders
+.vs/
+.vscode/
+.idea/

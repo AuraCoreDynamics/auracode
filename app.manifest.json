@@ -2,7 +2,7 @@
   "schemaVersion": "1.0",
   "appId": "auracode",
   "name": "AuraCode",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Terminal-native, vendor-agnostic AI coding assistant.",
   "author": "AuraCore Dynamics Inc.",
   "installer": {

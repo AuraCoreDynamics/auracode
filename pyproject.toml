@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "auracode"
-version = "0.1.0"
+version = "0.2.0"
 description = "Terminal-native, vendor-agnostic AI coding assistant powered by Federated Mixture-of-Experts"
 readme = "README.md"
 license = { text = "MIT" }
@@ -84,7 +84,7 @@ auracode = "auracode.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-auracode = ["py.typed", "assets/*.gguf"]
+auracode = ["py.typed", "assets/*.gguf", "ci/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

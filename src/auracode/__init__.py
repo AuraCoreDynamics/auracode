@@ -1,6 +1,6 @@
 """AuraCode — Terminal-native, vendor-agnostic AI coding assistant."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from auracode.app import create_application
 from auracode.engine.core import AuraCodeEngine
