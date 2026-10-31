@@ -1,0 +1,22 @@
+{
+  "version": "1.0",
+  "pidsLimit": 512,
+  "nofileLimit": 4096,
+  "securityOpts": ["no-new-privileges"],
+  "capDrop": ["ALL"],
+  "readOnly": true,
+  "tmpfsMounts": [
+    { "destination": "/tmp", "options": "size=1g,mode=1777" },
+    { "destination": "/home/ci", "options": "size=2g,mode=0700" }
+  ],
+  "env": {
+    "HOME": "/home/ci",
+    "TMPDIR": "/tmp",
+    "DOTNET_CLI_HOME": "/home/ci/.dotnet",
+    "PIP_CACHE_DIR": "/home/ci/.cache/pip",
+    "NUGET_PACKAGES": "/home/ci/.nuget/packages"
+  },
+  "defaultNetwork": "none",
+  "defaultUser": "1000:1000",
+  "userns": "keep-id"
+}

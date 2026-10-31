@@ -1,0 +1,11 @@
+{
+  "version": "1.0",
+  "images": {
+    "ubuntu-latest": "ghcr.io/auracore/ci-runner-ubuntu@sha256:4a85817a58b29dfba225573fd095deebcd5d8a8e18ab2cb1ab5a7fa19c67f08c",
+    "python:3.12": "ghcr.io/auracore/ci-runner-python312@sha256:7b1f3e5898d9e68c2db35252b826b5c00e6d6dfc33b7cf85194165dc5cb22119",
+    "python:3.13": "ghcr.io/auracore/ci-runner-python313@sha256:9c2d1b7829a4e32d187219c687e87ab0cfb85df1914902dc6b8561ee481d4576",
+    "dotnet:8.0": "ghcr.io/auracore/ci-runner-dotnet80@sha256:2a83921bfd52140683057398188219abf17ca31853db29a3a1059f6b4d32080a",
+    "dotnet:9.0": "ghcr.io/auracore/ci-runner-dotnet90@sha256:3b94032bfd52140683057398188219abf17ca31853db29a3a1059f6b4d32090b",
+    "dotnet:10.0": "ghcr.io/auracore/ci-runner-dotnet100@sha256:1e4a298bfd52140683057398188219abf17ca31853db29a3a1059f6b4d32049e"
+  }
+}

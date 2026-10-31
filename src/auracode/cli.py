@@ -6,6 +6,9 @@ import asyncio
 
 import click
 
+from auracode import __version__
+from auracode.ci.cli import ci
+
 
 class _DefaultGroup(click.Group):
     """A Click group that invokes the REPL when no subcommand is given."""
@@ -21,7 +24,7 @@ class _DefaultGroup(click.Group):
 
 
 @click.group(cls=_DefaultGroup)
-@click.version_option(package_name="auracode")
+@click.version_option(version=__version__, package_name="auracode")
 @click.option("--config", type=click.Path(), default=None, help="Path to auracode.yaml")
 @click.option("--allow-write", is_flag=True, default=False, help="Allow agent to write files.")
 @click.option(
@@ -98,11 +101,25 @@ def models(ctx: click.Context) -> None:
 
 
 @main.command()
+@click.pass_context
+def mcp(ctx: click.Context) -> None:
+    """Run AuraCode Model Context Protocol (MCP) server over standard I/O (stdio)."""
+    from auracode.app import create_application
+    from auracode.mcp_server import run_stdio_server
+
+    engine, _, _, _ = create_application(
+        ctx.obj.get("config_path"),
+        permissions_override=ctx.obj.get("permissions"),
+    )
+    run_stdio_server(engine)
+
+
+@main.command()
 @click.option("--port", default=8741, help="Port for API shim server")
-@click.option("--host", default="127.0.0.1", help="Bind address")
+@click.option("--host", default="0.0.0.0", help="Bind address")
 @click.pass_context
 def serve(ctx: click.Context, port: int, host: str) -> None:
-    """Start the OpenAI-compatible API shim server."""
+    """Start the OpenAI-compatible API shim server (Standalone offline mode)."""
     try:
         import aiohttp.web as web  # noqa: F401
     except ImportError:
@@ -183,7 +200,7 @@ def poller(ctx: click.Context, preflight_command: str | None) -> None:
 
 @main.command()
 @click.option("--port", default=8741, help="Port for Mission Command web UI")
-@click.option("--host", default="127.0.0.1", help="Bind address")
+@click.option("--host", default="0.0.0.0", help="Bind address")
 @click.option("--open-browser", is_flag=True, default=False, help="Open browser on start")
 @click.option("--auth-token", default=None, help="Bearer token required for API and remote UI")
 @click.pass_context
@@ -194,7 +211,7 @@ def ui(
     open_browser: bool,
     auth_token: str | None,
 ) -> None:
-    """Launch the Mission Command Web Flight Deck."""
+    """Launch the Mission Command Web Flight Deck (Standalone offline mode)."""
     try:
         import aiohttp.web as web  # noqa: F401
     except ImportError:
@@ -363,6 +380,8 @@ def bundle_inspect(bundle_path: str) -> None:
         click.echo(f"Error inspecting bundle: {exc}", err=True)
         raise SystemExit(1)
 
+
+main.add_command(ci)
 
 if __name__ == "__main__":
     main()
