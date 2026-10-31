@@ -1,6 +1,6 @@
 # AuraCode
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue) ![Python](https://img.shields.io/badge/python-3.12%2B-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-0.2.0-blue) ![Python](https://img.shields.io/badge/python-3.12%2B-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 **Terminal-native, sovereign, and vendor-agnostic AI coding assistant powered by Federated Mixture-of-Experts.**
 
@@ -186,20 +186,20 @@ auracode claude review src/auracode/routing/embedded.py
 AuraCode can act as a local OpenAI-compatible API server, allowing any IDE extension that supports custom endpoints to use your full model roster:
 
 ```bash
-# Start the API shim on localhost:8741
+# Start the API shim on node port 8741
 auracode serve
 
 # Custom port
 auracode serve --port 9000
 ```
 
-Then configure your IDE extension to point at `http://127.0.0.1:8741/v1` as the API base URL. The extension thinks it's talking to OpenAI. AuraCode intercepts every request and routes it through your configured model fabric.
+Then configure your IDE extension to point at `http://node-endpoint:8741/v1` as the API base URL. The extension thinks it's talking to OpenAI. AuraCode intercepts every request and routes it through your configured model fabric.
 
 When `aurarouter_url` is set in `auracode.yaml`, `auracode serve` also push-registers AuraCode with AuraRouter's unified catalog on startup (capabilities: code-generation, code-review, code-refactoring, security-review) and sends a heartbeat every 5 minutes. Deregistration happens on clean shutdown. This is opt-in — leaving `aurarouter_url: null` (the default) disables registration entirely.
 
 ```yaml
 # auracode.yaml — enable AuraRouter catalog registration
-aurarouter_url: "http://localhost:8321"   # null to disable (default)
+aurarouter_url: "http://router-node:8321"   # null to disable (default)
 mcp_self_endpoint: "http://myhost:8741"   # how AuraRouter calls back to this instance
 ```
 
@@ -773,7 +773,7 @@ AuraCode anchors the developer and agent operations tier in the four-tier AuraCo
 ### 1. Node-Local MAS & Reverse-MCP Grid Exposure
 When deployed across AuraGrid worker nodes, AuraCode functions as an autonomous coding
 specialist agent. It starts a `NodeMasAgentClient` that registers 21 FastMCP tools with the
-node-local Multi-Agent System (MAS coordinator at `http://127.0.0.1:8740`).
+node-local Multi-Agent System (MAS coordinator at `http://node-coordinator:8740`).
 Available MCP tools include:
 - `auracode_act`: Headless execution of multi-turn code generation with test verification.
 - `auracode_repomap`: Instant AST-based repository architecture map (<2KB context footprint).
@@ -828,6 +828,35 @@ auracode bundle pack app.manifest.json dist/my-app.aurabundle
 # Inspect bundle contents and SHA-256 digest
 auracode bundle inspect dist/my-app.aurabundle
 ```
+
+### 6. Autonomous CI/CD Subsystem (`auracode ci`)
+AuraCode v0.2.0 includes a vendor-agnostic CI/CD orchestration and closed-loop repair subsystem:
+
+```bash
+# Parse workflows (GitHub Actions, GitLab CI, Azure Pipelines) into unified execution graphs
+auracode ci plan
+
+# Execute pipeline steps locally or auction to AuraGrid compute nodes
+auracode ci verify
+
+# Run bounded closed-loop autonomous repair in isolated git worktrees
+auracode ci repair
+
+# Check CI execution environment and grid provider readiness
+auracode ci doctor
+
+# Install git pre-push verification hook
+auracode ci hook-dispatch --install-pre-push
+
+# Execute pre-push hook validation before publishing commits
+auracode ci hook-dispatch
+```
+
+**Key CI/CD Capabilities:**
+- **Universal Workflow Parser**: Transparently parses GitHub Actions (`.github/workflows/*.yml`), GitLab CI (`.gitlab-ci.yml`), and local matrix execution plans without vendor lock-in.
+- **Closed-Loop Autonomous Repair**: Automatically diagnoses failed compilation, linting, or tests; spins up isolated git worktrees (`auracode/repair/<sha>-<attempt>`); applies deterministic fixers and LLM patches; and validates results against strict anti-gaming boundaries (rejects `# noqa`, `type: ignore`, skips, and CI workflow file edits).
+- **Pre-Push Verification Gate**: Enforces that only passing, cryptographically signed verification runs are allowed to push to remote repositories.
+- **AuraGrid Cloud/Cell Offloading**: Bids CI workloads out to sovereign AuraGrid nodes with hardened container sandbox profiles (`ci-sandbox-profile.v1.json`) and ED25519 signed step proofs.
 
 ## Development
 
