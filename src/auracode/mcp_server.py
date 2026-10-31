@@ -861,23 +861,25 @@ def create_mcp_server(engine: Any) -> Any | None:
 
     @server.tool()
     async def auragrid_get_topology(
-        url: str = "http://localhost:7077",
+        url: str = "",
     ) -> str:
         """Query active AuraGrid cell topology, node health, active MAS instances,
         and registered services.
         """
         import json
+        import os
 
         import httpx
 
+        target_url = url or os.environ.get("AURAGRID_NODE_URL", "http://node-local:7077")
         try:
             async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
-                status_res = await client.get(f"{url.rstrip('/')}/api/status")
-                services_res = await client.get(f"{url.rstrip('/')}/api/services")
-                deployments_res = await client.get(f"{url.rstrip('/')}/api/deployments")
+                status_res = await client.get(f"{target_url.rstrip('/')}/api/status")
+                services_res = await client.get(f"{target_url.rstrip('/')}/api/services")
+                deployments_res = await client.get(f"{target_url.rstrip('/')}/api/deployments")
 
                 topology: dict[str, Any] = {
-                    "node_url": url,
+                    "node_url": target_url,
                     "status": status_res.json() if status_res.status_code == 200 else None,
                     "services": services_res.json() if services_res.status_code == 200 else [],
                     "deployments": deployments_res.json()
@@ -886,6 +888,14 @@ def create_mcp_server(engine: Any) -> Any | None:
                 }
                 return json.dumps(topology, indent=2)
         except Exception as e:
-            return json.dumps({"status": "error", "node_url": url, "message": str(e)})
+            return json.dumps({"status": "error", "node_url": target_url, "message": str(e)})
 
     return server
+
+
+def run_stdio_server(engine: Any) -> None:
+    """Run the AuraCode MCP server over standard I/O (stdio) for IDE integration."""
+    server = create_mcp_server(engine)
+    if server is None:
+        raise RuntimeError("FastMCP is not available. Please install the 'mcp' package.")
+    server.run(transport="stdio")

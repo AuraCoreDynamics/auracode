@@ -21,16 +21,17 @@ class NodeMasAgentClient:
     def __init__(
         self,
         mas_endpoint: str | None = None,
-        mcp_endpoint: str = "http://127.0.0.1:8741",
-        shim_endpoint: str = "http://127.0.0.1:8741",
-        ui_endpoint: str = "http://127.0.0.1:8741/ui",
+        mcp_endpoint: str | None = None,
+        shim_endpoint: str | None = None,
+        ui_endpoint: str | None = None,
         heartbeat_interval: float = DEFAULT_MAS_HEARTBEAT_INTERVAL,
     ) -> None:
         endpoint = mas_endpoint or os.environ.get("AURACODE_MAS_ENDPOINT", DEFAULT_MAS_ENDPOINT)
+        proxy_url = os.environ.get("AURAGRID_PROXY_URL", "http://node-local:7077")
         self.mas_endpoint = endpoint.rstrip("/")
-        self.mcp_endpoint = mcp_endpoint
-        self.shim_endpoint = shim_endpoint
-        self.ui_endpoint = ui_endpoint
+        self.mcp_endpoint = mcp_endpoint or f"{proxy_url}/mcp"
+        self.shim_endpoint = shim_endpoint or f"{proxy_url}/api/AuraCode"
+        self.ui_endpoint = ui_endpoint or f"{proxy_url}/ui/auracode"
         self.heartbeat_interval = heartbeat_interval
         self._registered = False
         self._heartbeat_task: asyncio.Task[None] | None = None

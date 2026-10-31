@@ -13,18 +13,18 @@ from auracode.models.request import EngineRequest
 log = structlog.get_logger()
 
 DEFAULT_ASSIST_ENDPOINT = os.environ.get(
-    "AURACORE_ASSIST_ENDPOINT", "http://127.0.0.1:8290/api/assist"
+    "AURACORE_ASSIST_ENDPOINT",
+    os.environ.get("AURAGRID_PROXY_URL", "http://node-local:7077") + "/api/AuraCoreAssist",
 )
 
 
 class AuraAssistRoutingClient:
-    """Client hook connecting AuraCode to AuraCore Assist via MCP over HTTP."""
+    """Client hook connecting AuraCode to AuraCore Assist via AuraGrid MAS."""
 
     def __init__(self, endpoint: str | None = None) -> None:
         self.endpoint = (endpoint or DEFAULT_ASSIST_ENDPOINT).rstrip("/")
-        # Derive MCP base URL from endpoint (e.g. http://127.0.0.1:8290/api/assist -> 8290)
-        if "/api/assist" in self.endpoint:
-            self.base_url = self.endpoint.split("/api/assist")[0]
+        if "/api/" in self.endpoint:
+            self.base_url = self.endpoint.split("/api/")[0]
         else:
             self.base_url = self.endpoint
 
@@ -32,9 +32,10 @@ class AuraAssistRoutingClient:
     def is_available(self) -> bool:
         """Checks if AuraCore Assist service is active and reachable via health probe."""
         probe_paths = [
+            f"{self.endpoint}/GetHealth",
+            f"{self.base_url}/api/services",
             f"{self.base_url}/healthz",
             f"{self.endpoint}/health",
-            f"{self.base_url}/api/assist/health",
         ]
         for path in probe_paths:
             try:
